@@ -1,4 +1,6 @@
-import 'package:alzeh/features/home_nav/screens/medication_details.dart';
+// lib/features/home_nav/view.dart - UPDATED
+
+import 'package:alzeh/features/medication/medication_list_screen.dart';
 import 'package:alzeh/features/widgets/custom_nav_bar.dart';
 import 'package:curved_navigation_bar/curved_navigation_bar.dart';
 
@@ -16,9 +18,10 @@ class _HomeNavScreenState extends State<HomeNavScreen> {
   List<Widget> screens = [
     PatiendDetails(),
     HomeScreen(),
-    MedicineDetailsScreen(),
+    MedicationListScreen(), // Changed from MedicineDetailsScreen
     ProfileScreen(),
   ];
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(

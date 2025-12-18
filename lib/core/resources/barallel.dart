@@ -1,3 +1,5 @@
+// lib/core/resources/barallel.dart - ADD THESE LINES
+
 export 'package:alzeh/core/resources/app_button.dart';
 export 'package:alzeh/core/resources/app_form_field.dart';
 export 'package:alzeh/core/resources/app_styles.dart';
@@ -40,7 +42,8 @@ export 'package:alzeh/features/widgets/medicine_with_card.dart';
 export 'dart:io';
 export 'package:alzeh/features/widgets/photo_card.dart';
 
-
-
-
-
+// NEW EXPORTS - ADD THESE
+export 'package:alzeh/features/model/medication_model.dart';
+export 'package:alzeh/core/services/firebase_service.dart';
+export 'package:alzeh/features/medication/add_edit_medication_screen.dart';
+export 'package:alzeh/features/medication/medication_list_screen.dart';
