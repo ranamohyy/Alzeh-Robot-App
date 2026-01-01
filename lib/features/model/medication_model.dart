@@ -8,6 +8,7 @@ class MedicationModel {
   int quantity;
   String unit;
   bool enabled;
+  int slotNumber; // NEW: Slot assignment (0, 1, or 2)
   int? createdAt;
 
   MedicationModel({
@@ -18,6 +19,7 @@ class MedicationModel {
     required this.quantity,
     this.unit = 'pills',
     this.enabled = true,
+    this.slotNumber = 0, // Default to slot 0
     this.createdAt,
   });
 
@@ -30,6 +32,7 @@ class MedicationModel {
       'quantity': quantity,
       'unit': unit,
       'enabled': enabled,
+      'slotNumber': slotNumber, // NEW
       'createdAt': createdAt ?? DateTime.now().millisecondsSinceEpoch,
     };
   }
@@ -44,6 +47,7 @@ class MedicationModel {
       quantity: map['quantity'] ?? 0,
       unit: map['unit'] ?? 'pills',
       enabled: map['enabled'] ?? true,
+      slotNumber: map['slotNumber'] ?? 0, // NEW
       createdAt: map['createdAt'],
     );
   }
@@ -57,6 +61,7 @@ class MedicationModel {
     int? quantity,
     String? unit,
     bool? enabled,
+    int? slotNumber,
     int? createdAt,
   }) {
     return MedicationModel(
@@ -67,6 +72,7 @@ class MedicationModel {
       quantity: quantity ?? this.quantity,
       unit: unit ?? this.unit,
       enabled: enabled ?? this.enabled,
+      slotNumber: slotNumber ?? this.slotNumber,
       createdAt: createdAt ?? this.createdAt,
     );
   }

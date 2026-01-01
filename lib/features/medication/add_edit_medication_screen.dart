@@ -1,7 +1,7 @@
 // lib/features/medication/add_edit_medication_screen.dart
 
 import 'package:alzeh/core/resources/barallel.dart';
-import 'package:alzeh/core/services/firebase_service.dart';
+import 'package:alzeh/core/services/firestore_service.dart';
 import 'package:alzeh/features/model/medication_model.dart';
 import 'package:flutter/material.dart';
 
@@ -15,6 +15,7 @@ class AddEditMedicationScreen extends StatefulWidget {
 }
 
 class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _timeController = TextEditingController();
   final _frequencyController = TextEditingController();
@@ -40,6 +41,16 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: _selectedTime ?? TimeOfDay.now(),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: AppColors.primaryColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (picked != null) {
@@ -51,13 +62,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
   }
 
   Future<void> _saveMedication() async {
-    if (_nameController.text.isEmpty ||
-        _timeController.text.isEmpty ||
-        _frequencyController.text.isEmpty ||
-        _quantityController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
+    if (!_formKey.currentState!.validate()) {
       return;
     }
 
@@ -65,9 +70,9 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
 
     final medication = MedicationModel(
       id: widget.medication?.id,
-      name: _nameController.text,
+      name: _nameController.text.trim(),
       time: _timeController.text,
-      frequency: _frequencyController.text,
+      frequency: _frequencyController.text.trim(),
       quantity: int.parse(_quantityController.text),
       unit: _selectedUnit,
       enabled: true,
@@ -75,10 +80,10 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
 
     bool success;
     if (widget.medication == null) {
-      final id = await FirebaseService.addMedication(medication);
+      final id = await FirestoreService.addMedication(medication);
       success = id != null;
     } else {
-      success = await FirebaseService.updateMedication(medication);
+      success = await FirestoreService.updateMedication(medication);
     }
 
     setState(() => _isLoading = false);
@@ -87,13 +92,16 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
       await showSuccessDialog(
         context,
         widget.medication == null
-            ? 'Medication added successfully'
-            : 'Medication updated successfully',
+            ? '✓ Medication added successfully'
+            : '✓ Medication updated successfully',
       );
       Navigator.pop(context);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to save medication')),
+        const SnackBar(
+          content: Text('Failed to save medication'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -109,53 +117,80 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
               ? 'Add Medication'
               : 'Edit Medication',
         ),
-        body: SingleChildScrollView(
-          padding: EdgeInsets.all(20.r),
-          child: Column(
-            spacing: 20.h,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildTextField(
-                controller: _nameController,
-                label: 'Medicine Name',
-                hint: 'Enter medicine name',
-                icon: Icons.medication,
-              ),
-              _buildTimeField(),
-              _buildTextField(
-                controller: _frequencyController,
-                label: 'Frequency',
-                hint: 'e.g., Every 8 hours, Daily',
-                icon: Icons.refresh,
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: _buildTextField(
-                      controller: _quantityController,
-                      label: 'Quantity',
-                      hint: 'Number',
-                      icon: Icons.format_list_numbered,
-                      keyboardType: TextInputType.number,
+        body: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(20.r),
+            child: Column(
+              spacing: 20.h,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildTextField(
+                  controller: _nameController,
+                  label: 'Medicine Name',
+                  hint: 'Enter medicine name',
+                  icon: Icons.medication,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter medicine name';
+                    }
+                    return null;
+                  },
+                ),
+                _buildTimeField(),
+                _buildTextField(
+                  controller: _frequencyController,
+                  label: 'Frequency',
+                  hint: 'e.g., Every 8 hours, Daily',
+                  icon: Icons.refresh,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter frequency';
+                    }
+                    return null;
+                  },
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _buildTextField(
+                        controller: _quantityController,
+                        label: 'Quantity',
+                        hint: 'Number',
+                        icon: Icons.format_list_numbered,
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Required';
+                          }
+                          if (int.tryParse(value) == null) {
+                            return 'Invalid number';
+                          }
+                          if (int.parse(value) <= 0) {
+                            return 'Must be > 0';
+                          }
+                          return null;
+                        },
+                      ),
                     ),
-                  ),
-                  WidthSpace(16),
-                  Expanded(
-                    child: _buildUnitDropdown(),
-                  ),
-                ],
-              ),
-              HeightSpace(20),
-              _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : AppButton(
-                hintText: widget.medication == null
-                    ? 'Add Medication'
-                    : 'Update Medication',
-                onPressed: _saveMedication,
-              ),
-            ],
+                    WidthSpace(16),
+                    Expanded(
+                      child: _buildUnitDropdown(),
+                    ),
+                  ],
+                ),
+                HeightSpace(20),
+                _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : AppButton(
+                  hintText: widget.medication == null
+                      ? 'Add Medication'
+                      : 'Update Medication',
+                  onPressed: _saveMedication,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -168,15 +203,17 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
     required String hint,
     required IconData icon,
     TextInputType? keyboardType,
+    String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: AppStyles.kTextStyle14primary),
         HeightSpace(8),
-        TextField(
+        TextFormField(
           controller: controller,
           keyboardType: keyboardType,
+          validator: validator,
           decoration: InputDecoration(
             hintText: hint,
             prefixIcon: Icon(icon, color: AppColors.primaryColor),
@@ -191,6 +228,10 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
               borderRadius: BorderRadius.circular(12.r),
               borderSide: const BorderSide(color: AppColors.primaryColor),
             ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: Colors.red),
+            ),
           ),
         ),
       ],
@@ -203,10 +244,16 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
       children: [
         Text('Time', style: AppStyles.kTextStyle14primary),
         HeightSpace(8),
-        TextField(
+        TextFormField(
           controller: _timeController,
           readOnly: true,
           onTap: _selectTime,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please select time';
+            }
+            return null;
+          },
           decoration: InputDecoration(
             hintText: 'Select time',
             prefixIcon:
@@ -222,6 +269,10 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12.r),
               borderSide: const BorderSide(color: AppColors.primaryColor),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: Colors.red),
             ),
           ),
         ),

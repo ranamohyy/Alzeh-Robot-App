@@ -5,7 +5,10 @@ import 'package:alzeh/features/model/medication_model.dart';
 
 class FirebaseService {
   static final FirebaseDatabase _database = FirebaseDatabase.instance;
-  static const String _userId = 'userId_123'; // Replace with actual user ID from auth
+
+  // For now, use a simple fixed user ID that works with open rules
+  // Later, replace this with Firebase Auth user ID
+  static const String _userId = 'user_test_123';
 
   // Get database reference
   static DatabaseReference get _medicationsRef =>

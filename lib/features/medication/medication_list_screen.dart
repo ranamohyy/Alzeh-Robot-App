@@ -1,7 +1,7 @@
 // lib/features/medication/medication_list_screen.dart
 
 import 'package:alzeh/core/resources/barallel.dart';
-import 'package:alzeh/core/services/firebase_service.dart';
+import 'package:alzeh/core/services/firestore_service.dart';
 import 'package:alzeh/features/model/medication_model.dart';
 import 'package:alzeh/features/medication/add_edit_medication_screen.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +30,7 @@ class MedicationListScreen extends StatelessWidget {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: StreamBuilder<List<MedicationModel>>(
-        stream: FirebaseService.getMedicationsStream(),
+        stream: FirestoreService.getMedicationsStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -38,7 +38,22 @@ class MedicationListScreen extends StatelessWidget {
 
           if (snapshot.hasError) {
             return Center(
-              child: Text('Error: ${snapshot.error}'),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 80.r, color: Colors.red),
+                  HeightSpace(16),
+                  Text('Error: ${snapshot.error}'),
+                  HeightSpace(16),
+                  ElevatedButton(
+                    onPressed: () {
+                      // Trigger rebuild
+                      (context as Element).markNeedsBuild();
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
             );
           }
 
@@ -88,19 +103,42 @@ class MedicationListCard extends StatelessWidget {
   final MedicationModel medication;
 
   Future<void> _dispenseMedication(BuildContext context) async {
-    final success = await FirebaseService.sendDispenseCommand(
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: CircularProgressIndicator(),
+      ),
+    );
+
+    final success = await FirestoreService.sendDispenseCommand(
       medication.id!,
+      medication.name,
       medication.quantity,
     );
 
+    // Close loading dialog
+    if (context.mounted) Navigator.pop(context);
+
     if (success && context.mounted) {
+      // Log the medication as taken
+      await FirestoreService.logMedicationTaken(
+        medication.id!,
+        medication.name,
+        'taken',
+      );
+
       await showSuccessDialog(
         context,
-        'Dispense command sent to ESP32!\n${medication.quantity} ${medication.unit} of ${medication.name}',
+        'Dispense command sent!\n${medication.quantity} ${medication.unit} of ${medication.name}',
       );
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to send dispense command')),
+        const SnackBar(
+          content: Text('Failed to send dispense command'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -126,10 +164,13 @@ class MedicationListCard extends StatelessWidget {
     );
 
     if (confirm == true) {
-      final success = await FirebaseService.deleteMedication(medication.id!);
+      final success = await FirestoreService.deleteMedication(medication.id!);
       if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Medication deleted')),
+          SnackBar(
+            content: Text('${medication.name} deleted'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     }
@@ -160,7 +201,7 @@ class MedicationListCard extends StatelessWidget {
                 Switch(
                   value: medication.enabled,
                   onChanged: (value) {
-                    FirebaseService.toggleMedicationStatus(
+                    FirestoreService.toggleMedicationStatus(
                       medication.id!,
                       value,
                     );
@@ -192,6 +233,7 @@ class MedicationListCard extends StatelessWidget {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8.r),
                       ),
+                      disabledBackgroundColor: Colors.grey,
                     ),
                   ),
                 ),
