@@ -23,6 +23,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
 
   bool _isLoading = false;
   String _selectedUnit = 'pills';
+  int _selectedSlot = 0; // Slot selection (0, 1, or 2)
   TimeOfDay? _selectedTime;
 
   @override
@@ -34,6 +35,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
       _frequencyController.text = widget.medication!.frequency;
       _quantityController.text = widget.medication!.quantity.toString();
       _selectedUnit = widget.medication!.unit;
+      _selectedSlot = widget.medication!.slotNumber;
     }
   }
 
@@ -75,6 +77,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
       frequency: _frequencyController.text.trim(),
       quantity: int.parse(_quantityController.text),
       unit: _selectedUnit,
+      slotNumber: _selectedSlot,
       enabled: true,
     );
 
@@ -150,6 +153,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     return null;
                   },
                 ),
+                _buildSlotDropdown(),
                 Row(
                   children: [
                     Expanded(
@@ -275,6 +279,90 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
               borderSide: const BorderSide(color: Colors.red),
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSlotDropdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Device Slot', style: AppStyles.kTextStyle14primary),
+        HeightSpace(8),
+        DropdownButtonFormField<int>(
+          value: _selectedSlot,
+          decoration: InputDecoration(
+            hintText: 'Select slot',
+            prefixIcon: const Icon(Icons.inventory_2, color: AppColors.primaryColor),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12.r),
+              borderSide: const BorderSide(color: AppColors.primaryColor),
+            ),
+          ),
+          items: [
+            DropdownMenuItem(
+              value: 0,
+              child: Row(
+                children: [
+                  Container(
+                    width: 12.w,
+                    height: 12.h,
+                    decoration: const BoxDecoration(
+                      color: Colors.blue,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  WidthSpace(8),
+                  const Text('Slot 1 (Left)'),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 1,
+              child: Row(
+                children: [
+                  Container(
+                    width: 12.w,
+                    height: 12.h,
+                    decoration: const BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  WidthSpace(8),
+                  const Text('Slot 2 (Middle)'),
+                ],
+              ),
+            ),
+            DropdownMenuItem(
+              value: 2,
+              child: Row(
+                children: [
+                  Container(
+                    width: 12.w,
+                    height: 12.h,
+                    decoration: const BoxDecoration(
+                      color: Colors.orange,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  WidthSpace(8),
+                  const Text('Slot 3 (Right)'),
+                ],
+              ),
+            ),
+          ],
+          onChanged: (value) {
+            setState(() => _selectedSlot = value!);
+          },
         ),
       ],
     );

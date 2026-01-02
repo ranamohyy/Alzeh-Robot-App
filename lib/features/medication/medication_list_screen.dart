@@ -1,7 +1,7 @@
-// lib/features/medication/medication_list_screen.dart
+// lib/features/medication/medication_list_screen.dart - HYBRID VERSION
 
 import 'package:alzeh/core/resources/barallel.dart';
-import 'package:alzeh/core/services/firestore_service.dart';
+import 'package:alzeh/core/services/firebase_service.dart';
 import 'package:alzeh/features/model/medication_model.dart';
 import 'package:alzeh/features/medication/add_edit_medication_screen.dart';
 import 'package:flutter/material.dart';
@@ -30,7 +30,7 @@ class MedicationListScreen extends StatelessWidget {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: StreamBuilder<List<MedicationModel>>(
-        stream: FirestoreService.getMedicationsStream(),
+        stream: FirebaseService.getMedicationsStream(), // From Firestore
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -79,18 +79,70 @@ class MedicationListScreen extends StatelessWidget {
                     'Tap + to add your first medication',
                     style: AppStyles.kTextStyle14primary,
                   ),
+                  HeightSpace(24),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      FirebaseService.forceFullSync();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Syncing with ESP32...'),
+                          backgroundColor: AppColors.primaryColor,
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Sync with Device'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryColor,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             );
           }
 
-          return ListView.builder(
-            padding: EdgeInsets.all(16.r),
-            itemCount: medications.length,
-            itemBuilder: (context, index) {
-              final medication = medications[index];
-              return MedicationListCard(medication: medication);
-            },
+          return Column(
+            children: [
+              // Sync button at top
+              Padding(
+                padding: EdgeInsets.all(16.r),
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    await FirebaseService.forceFullSync();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('✓ Synced with ESP32'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.sync, size: 18),
+                  label: const Text('Sync with Device'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryColor,
+                    foregroundColor: Colors.white,
+                    minimumSize: Size(double.infinity, 45.h),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12.r),
+                    ),
+                  ),
+                ),
+              ),
+              // Medication list
+              Expanded(
+                child: ListView.builder(
+                  padding: EdgeInsets.symmetric(horizontal: 16.r),
+                  itemCount: medications.length,
+                  itemBuilder: (context, index) {
+                    final medication = medications[index];
+                    return MedicationListCard(medication: medication);
+                  },
+                ),
+              ),
+            ],
           );
         },
       ),
@@ -107,23 +159,31 @@ class MedicationListCard extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            HeightSpace(16),
+            const Text('Sending command to ESP32...'),
+          ],
+        ),
       ),
     );
 
-    final success = await FirestoreService.sendDispenseCommand(
+    // Send command to ESP32 via RTDB
+    final success = await FirebaseService.sendDispenseCommand(
       medication.id!,
       medication.name,
-      medication.quantity,
+      medication.slotNumber,
     );
 
     // Close loading dialog
     if (context.mounted) Navigator.pop(context);
 
     if (success && context.mounted) {
-      // Log the medication as taken
-      await FirestoreService.logMedicationTaken(
+      // Log to Firestore
+      await FirebaseService.logMedicationTaken(
         medication.id!,
         medication.name,
         'taken',
@@ -131,12 +191,12 @@ class MedicationListCard extends StatelessWidget {
 
       await showSuccessDialog(
         context,
-        'Dispense command sent!\n${medication.quantity} ${medication.unit} of ${medication.name}',
+        '✓ Command Sent!\n\nSlot ${medication.slotNumber + 1} - ${medication.name}\nQuantity: ${medication.quantity} ${medication.unit}\n\nESP32 will dispense now...',
       );
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Failed to send dispense command'),
+          content: Text('❌ Failed to send command to ESP32'),
           backgroundColor: Colors.red,
         ),
       );
@@ -164,7 +224,8 @@ class MedicationListCard extends StatelessWidget {
     );
 
     if (confirm == true) {
-      final success = await FirestoreService.deleteMedication(medication.id!);
+      // Delete from both Firestore and RTDB
+      final success = await FirebaseService.deleteMedication(medication.id!);
       if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -176,6 +237,19 @@ class MedicationListCard extends StatelessWidget {
     }
   }
 
+  Color _getSlotColor(int slotNumber) {
+    switch (slotNumber) {
+      case 0:
+        return Colors.blue;
+      case 1:
+        return Colors.green;
+      case 2:
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -183,6 +257,10 @@ class MedicationListCard extends StatelessWidget {
       elevation: 2,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16.r),
+        side: BorderSide(
+          color: _getSlotColor(medication.slotNumber).withOpacity(0.3),
+          width: 2,
+        ),
       ),
       child: Padding(
         padding: EdgeInsets.all(16.r),
@@ -192,6 +270,23 @@ class MedicationListCard extends StatelessWidget {
           children: [
             Row(
               children: [
+                // Slot indicator
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: _getSlotColor(medication.slotNumber),
+                    borderRadius: BorderRadius.circular(8.r),
+                  ),
+                  child: Text(
+                    'Slot ${medication.slotNumber + 1}',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                WidthSpace(12),
                 Expanded(
                   child: Text(
                     medication.name,
@@ -201,7 +296,7 @@ class MedicationListCard extends StatelessWidget {
                 Switch(
                   value: medication.enabled,
                   onChanged: (value) {
-                    FirestoreService.toggleMedicationStatus(
+                    FirebaseService.toggleMedicationStatus(
                       medication.id!,
                       value,
                     );
