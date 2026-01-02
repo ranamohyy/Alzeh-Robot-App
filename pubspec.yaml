@@ -21,8 +21,14 @@ dependencies:
   firebase_core: ^3.6.0
   firebase_database: ^11.1.4
   firebase_auth: ^5.3.1
-  cloud_firestore: ^5.4.4  # NEW: Added Firestore
-  intl: ^0.19.0  # NEW: For date formatting
+  cloud_firestore: ^5.4.4
+
+  # Social Authentication
+  google_sign_in: ^6.2.1
+  flutter_facebook_auth: ^7.1.1
+
+  # Utilities
+  intl: ^0.19.0
 
 dev_dependencies:
   flutter_test:

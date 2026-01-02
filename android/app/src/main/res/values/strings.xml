@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Alzeh</string>
+
+    <!-- Facebook Configuration -->
+    <!-- REPLACE WITH YOUR FACEBOOK APP ID -->
+    <string name="facebook_app_id">YOUR_FACEBOOK_APP_ID</string>
+
+    <!-- REPLACE WITH YOUR FACEBOOK CLIENT TOKEN -->
+    <string name="facebook_client_token">YOUR_FACEBOOK_CLIENT_TOKEN</string>
+
+    <!-- REPLACE fb + YOUR_FACEBOOK_APP_ID (e.g., fb123456789012345) -->
+    <string name="fb_login_protocol_scheme">fbYOUR_FACEBOOK_APP_ID</string>
+</resources>
