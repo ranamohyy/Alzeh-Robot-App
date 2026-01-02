@@ -1,9 +1,10 @@
-// lib/features/home_nav/screens/profile.dart
+// lib/features/home_nav/screens/profile.dart - WITH DEBUG
 
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/auth_service.dart';
 import 'package:alzeh/features/auth/login.dart';
 import 'package:alzeh/features/edit_profile/edit_profile.dart';
+import 'package:alzeh/features/debug/debug_screen.dart';
 import 'package:alzeh/features/widgets/menu_items.dart';
 import 'package:alzeh/features/widgets/person_data.dart';
 import 'package:alzeh/features/widgets/profile_image.dart';
@@ -32,7 +33,6 @@ class ProfileScreen extends StatelessWidget {
     );
 
     if (confirm == true && context.mounted) {
-      // Show loading
       showDialog(
         context: context,
         barrierDismissible: false,
@@ -41,10 +41,8 @@ class ProfileScreen extends StatelessWidget {
         ),
       );
 
-      // Sign out
       await AuthService.signOut();
 
-      // Close loading and navigate to login
       if (context.mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
         Navigator.pushReplacement(
@@ -84,6 +82,24 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ],
             ),
+
+            // DEBUG MENU ITEM - ADD THIS
+            MenuItems(
+              title: 'Debug Tools',
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DebugScreen(),
+                  ),
+                );
+              },
+              iconWidget: Icon(
+                Icons.bug_report,
+                color: Colors.orange,
+              ),
+            ),
+
             MenuItems(
               icon: AppStrings.settings,
               title: 'Settings',
@@ -120,6 +136,50 @@ class ProfileScreen extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// Update MenuItems to support Icon widget
+class MenuItems extends StatelessWidget {
+  const MenuItems({
+    super.key,
+    this.icon,
+    required this.title,
+    required this.onTap,
+    this.isRed = false,
+    this.iconWidget,
+  });
+
+  final String? icon;
+  final Widget? iconWidget;
+  final String title;
+  final VoidCallback onTap;
+  final bool isRed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.all(0),
+      leading: iconWidget ??
+          (icon != null
+              ? AppImage.svgImage(
+            icon!,
+            ColorFilter.mode(
+              isRed ? Colors.red : AppColors.primaryColor,
+              BlendMode.srcIn,
+            ),
+          )
+              : const SizedBox.shrink()),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: isRed ? Colors.red : AppColors.primaryColor,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios_sharp, color: Colors.grey),
+      onTap: onTap,
     );
   }
 }

@@ -1,7 +1,8 @@
-// lib/features/medication/add_edit_medication_screen.dart
+// lib/features/medication/add_edit_medication_screen.dart - FIXED
+// Now saves to RTDB (same source as ESP32 reads from)
 
 import 'package:alzeh/core/resources/barallel.dart';
-import 'package:alzeh/core/services/firestore_service.dart';
+import 'package:alzeh/core/services/firebase_service.dart';
 import 'package:alzeh/features/model/medication_model.dart';
 import 'package:flutter/material.dart';
 
@@ -23,7 +24,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
 
   bool _isLoading = false;
   String _selectedUnit = 'pills';
-  int _selectedSlot = 0; // Slot selection (0, 1, or 2)
+  int _selectedSlot = 0;
   TimeOfDay? _selectedTime;
 
   @override
@@ -82,27 +83,32 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
     );
 
     bool success;
+    String message;
+
     if (widget.medication == null) {
-      final id = await FirestoreService.addMedication(medication);
+      // Add new medication to RTDB
+      final id = await FirebaseService.addMedication(medication);
       success = id != null;
+      message = success
+          ? '✓ Medication added to RTDB\nESP32 will sync automatically'
+          : '❌ Failed to add medication';
     } else {
-      success = await FirestoreService.updateMedication(medication);
+      // Update existing medication in RTDB
+      success = await FirebaseService.updateMedication(medication);
+      message = success
+          ? '✓ Medication updated in RTDB\nESP32 will sync automatically'
+          : '❌ Failed to update medication';
     }
 
     setState(() => _isLoading = false);
 
     if (success && mounted) {
-      await showSuccessDialog(
-        context,
-        widget.medication == null
-            ? '✓ Medication added successfully'
-            : '✓ Medication updated successfully',
-      );
+      await showSuccessDialog(context, message);
       Navigator.pop(context);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to save medication'),
+        SnackBar(
+          content: Text(message),
           backgroundColor: Colors.red,
         ),
       );
@@ -128,6 +134,31 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
               spacing: 20.h,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Info banner
+                Container(
+                  padding: EdgeInsets.all(12.r),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20.r),
+                      WidthSpace(12),
+                      Expanded(
+                        child: Text(
+                          'Saved to Realtime Database\nESP32 syncs automatically',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 _buildTextField(
                   controller: _nameController,
                   label: 'Medicine Name',
@@ -140,7 +171,9 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     return null;
                   },
                 ),
+
                 _buildTimeField(),
+
                 _buildTextField(
                   controller: _frequencyController,
                   label: 'Frequency',
@@ -153,7 +186,9 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     return null;
                   },
                 ),
+
                 _buildSlotDropdown(),
+
                 Row(
                   children: [
                     Expanded(
@@ -184,13 +219,15 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     ),
                   ],
                 ),
+
                 HeightSpace(20),
+
                 _isLoading
                     ? const Center(child: CircularProgressIndicator())
                     : AppButton(
                   hintText: widget.medication == null
-                      ? 'Add Medication'
-                      : 'Update Medication',
+                      ? 'Add to RTDB'
+                      : 'Update RTDB',
                   onPressed: _saveMedication,
                 ),
               ],
@@ -288,7 +325,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Device Slot', style: AppStyles.kTextStyle14primary),
+        Text('Device Slot (ESP32)', style: AppStyles.kTextStyle14primary),
         HeightSpace(8),
         DropdownButtonFormField<int>(
           value: _selectedSlot,
@@ -321,7 +358,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     ),
                   ),
                   WidthSpace(8),
-                  const Text('Slot 1 (Left)'),
+                  const Text('Slot 1 (Motor 1)'),
                 ],
               ),
             ),
@@ -338,7 +375,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     ),
                   ),
                   WidthSpace(8),
-                  const Text('Slot 2 (Middle)'),
+                  const Text('Slot 2 (Motor 2)'),
                 ],
               ),
             ),
@@ -355,7 +392,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     ),
                   ),
                   WidthSpace(8),
-                  const Text('Slot 3 (Right)'),
+                  const Text('Slot 3 (Motor 3)'),
                 ],
               ),
             ),

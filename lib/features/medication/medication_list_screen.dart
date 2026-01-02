@@ -1,4 +1,5 @@
-// lib/features/medication/medication_list_screen.dart - HYBRID VERSION
+// lib/features/medication/medication_list_screen.dart - FIXED
+// Now correctly reads from RTDB (same source as ESP32)
 
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/firebase_service.dart';
@@ -30,7 +31,7 @@ class MedicationListScreen extends StatelessWidget {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: StreamBuilder<List<MedicationModel>>(
-        stream: FirebaseService.getMedicationsStream(), // From Firestore
+        stream: FirebaseService.getMedicationsStream(), // From RTDB
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -47,7 +48,6 @@ class MedicationListScreen extends StatelessWidget {
                   HeightSpace(16),
                   ElevatedButton(
                     onPressed: () {
-                      // Trigger rebuild
                       (context as Element).markNeedsBuild();
                     },
                     child: const Text('Retry'),
@@ -80,21 +80,11 @@ class MedicationListScreen extends StatelessWidget {
                     style: AppStyles.kTextStyle14primary,
                   ),
                   HeightSpace(24),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      FirebaseService.forceFullSync();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Syncing with ESP32...'),
-                          backgroundColor: AppColors.primaryColor,
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.sync),
-                    label: const Text('Sync with Device'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryColor,
-                      foregroundColor: Colors.white,
+                  Text(
+                    'ESP32 will automatically sync',
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      color: Colors.grey,
                     ),
                   ),
                 ],
@@ -104,31 +94,29 @@ class MedicationListScreen extends StatelessWidget {
 
           return Column(
             children: [
-              // Sync button at top
-              Padding(
-                padding: EdgeInsets.all(16.r),
-                child: ElevatedButton.icon(
-                  onPressed: () async {
-                    await FirebaseService.forceFullSync();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('✓ Synced with ESP32'),
-                          backgroundColor: Colors.green,
+              // Info banner
+              Container(
+                margin: EdgeInsets.all(16.r),
+                padding: EdgeInsets.all(12.r),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue.shade700),
+                    WidthSpace(12),
+                    Expanded(
+                      child: Text(
+                        'ESP32 reads directly from this database',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: Colors.blue.shade700,
                         ),
-                      );
-                    }
-                  },
-                  icon: const Icon(Icons.sync, size: 18),
-                  label: const Text('Sync with Device'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryColor,
-                    foregroundColor: Colors.white,
-                    minimumSize: Size(double.infinity, 45.h),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12.r),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
               // Medication list
@@ -155,7 +143,46 @@ class MedicationListCard extends StatelessWidget {
   final MedicationModel medication;
 
   Future<void> _dispenseMedication(BuildContext context) async {
-    // Show loading dialog
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Dispense Medication'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Medication: ${medication.name}'),
+            HeightSpace(8),
+            Text('Slot: ${medication.slotNumber + 1}'),
+            HeightSpace(8),
+            Text('Quantity: ${medication.quantity} ${medication.unit}'),
+            HeightSpace(16),
+            Text(
+              'Send command to ESP32?',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryColor,
+            ),
+            child: const Text('Dispense', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -171,14 +198,14 @@ class MedicationListCard extends StatelessWidget {
       ),
     );
 
-    // Send command to ESP32 via RTDB
+    // Send command to RTDB (ESP32 listens here)
     final success = await FirebaseService.sendDispenseCommand(
       medication.id!,
       medication.name,
       medication.slotNumber,
     );
 
-    // Close loading dialog
+    // Close loading
     if (context.mounted) Navigator.pop(context);
 
     if (success && context.mounted) {
@@ -191,7 +218,7 @@ class MedicationListCard extends StatelessWidget {
 
       await showSuccessDialog(
         context,
-        '✓ Command Sent!\n\nSlot ${medication.slotNumber + 1} - ${medication.name}\nQuantity: ${medication.quantity} ${medication.unit}\n\nESP32 will dispense now...',
+        '✓ Command Sent to ESP32!\n\nSlot ${medication.slotNumber + 1}: ${medication.name}\nQuantity: ${medication.quantity} ${medication.unit}\n\nESP32 will dispense now...',
       );
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -224,12 +251,11 @@ class MedicationListCard extends StatelessWidget {
     );
 
     if (confirm == true) {
-      // Delete from both Firestore and RTDB
       final success = await FirebaseService.deleteMedication(medication.id!);
       if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${medication.name} deleted'),
+            content: Text('${medication.name} deleted from RTDB'),
             backgroundColor: Colors.green,
           ),
         );

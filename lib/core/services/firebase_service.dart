@@ -1,5 +1,4 @@
-// lib/core/services/firebase_service.dart
-// HYBRID: Firestore for storage + RTDB for ESP32 sync
+// lib/core/services/firebase_service.dart - FIXED VERSION
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_database/firebase_database.dart';
@@ -8,63 +7,11 @@ import 'package:alzeh/features/model/medication_model.dart';
 import 'package:alzeh/features/model/user_model.dart';
 
 class FirebaseService {
-  // Firestore (permanent storage)
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  // Realtime Database (ESP32 sync)
   static final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
-
   static final FirebaseAuth _auth = FirebaseAuth.instance;
 
   static String get currentUserId => _auth.currentUser?.uid ?? 'user_test_123';
-
-  // ==================== USER MANAGEMENT (FIRESTORE) ====================
-
-  /// Save user profile to Firestore
-  static Future<bool> saveUserProfile(UserModel user) async {
-    try {
-      await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .set(user.toMap(), SetOptions(merge: true));
-      return true;
-    } catch (e) {
-      print('Error saving user profile: $e');
-      return false;
-    }
-  }
-
-  /// Get user profile from Firestore
-  static Future<UserModel?> getUserProfile() async {
-    try {
-      final doc = await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .get();
-
-      if (doc.exists) {
-        return UserModel.fromMap(doc.data()!);
-      }
-      return null;
-    } catch (e) {
-      print('Error getting user profile: $e');
-      return null;
-    }
-  }
-
-  /// Stream user profile from Firestore
-  static Stream<UserModel?> getUserProfileStream() {
-    return _firestore
-        .collection('users')
-        .doc(currentUserId)
-        .snapshots()
-        .map((doc) {
-      if (doc.exists) {
-        return UserModel.fromMap(doc.data()!);
-      }
-      return null;
-    });
-  }
 
   // ==================== MEDICATION MANAGEMENT (DUAL STORAGE) ====================
 
@@ -80,12 +27,17 @@ class FirebaseService {
 
       final medicationId = docRef.id;
 
-      // 2. Sync to RTDB for ESP32
-      await _syncMedicationToRTDB(medicationId, medication);
+      // 2. Sync to RTDB for ESP32 - FIXED PATH
+      await _rtdb
+          .ref('medications/$currentUserId/$medicationId')
+          .set(medication.toMap());
+
+      print('✅ Medication added: $medicationId');
+      print('📤 Synced to RTDB at: medications/$currentUserId/$medicationId');
 
       return medicationId;
     } catch (e) {
-      print('Error adding medication: $e');
+      print('❌ Error adding medication: $e');
       return null;
     }
   }
@@ -103,12 +55,15 @@ class FirebaseService {
           .doc(medication.id)
           .update(medication.toMap());
 
-      // 2. Sync to RTDB for ESP32
-      await _syncMedicationToRTDB(medication.id!, medication);
+      // 2. Update in RTDB for ESP32 - FIXED PATH
+      await _rtdb
+          .ref('medications/$currentUserId/${medication.id}')
+          .update(medication.toMap());
 
+      print('✅ Medication updated: ${medication.id}');
       return true;
     } catch (e) {
-      print('Error updating medication: $e');
+      print('❌ Error updating medication: $e');
       return false;
     }
   }
@@ -124,29 +79,16 @@ class FirebaseService {
           .doc(medicationId)
           .delete();
 
-      // 2. Remove from RTDB
+      // 2. Remove from RTDB - FIXED PATH
       await _rtdb
           .ref('medications/$currentUserId/$medicationId')
           .remove();
 
+      print('✅ Medication deleted: $medicationId');
       return true;
     } catch (e) {
-      print('Error deleting medication: $e');
+      print('❌ Error deleting medication: $e');
       return false;
-    }
-  }
-
-  /// Sync single medication to RTDB (for ESP32)
-  static Future<void> _syncMedicationToRTDB(
-      String medicationId,
-      MedicationModel medication,
-      ) async {
-    try {
-      await _rtdb
-          .ref('medications/$currentUserId/$medicationId')
-          .set(medication.toMap());
-    } catch (e) {
-      print('Error syncing to RTDB: $e');
     }
   }
 
@@ -163,26 +105,6 @@ class FirebaseService {
         return MedicationModel.fromMap(doc.id, doc.data());
       }).toList();
     });
-  }
-
-  /// Get single medication from Firestore
-  static Future<MedicationModel?> getMedication(String medicationId) async {
-    try {
-      final doc = await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .collection('medications')
-          .doc(medicationId)
-          .get();
-
-      if (doc.exists) {
-        return MedicationModel.fromMap(doc.id, doc.data()!);
-      }
-      return null;
-    } catch (e) {
-      print('Error getting medication: $e');
-      return null;
-    }
   }
 
   /// Toggle medication status (updates BOTH)
@@ -202,40 +124,83 @@ class FirebaseService {
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. Update RTDB for ESP32
+      // 2. Update RTDB for ESP32 - FIXED PATH
       await _rtdb
           .ref('medications/$currentUserId/$medicationId/enabled')
           .set(enabled);
 
+      print('✅ Medication ${enabled ? 'enabled' : 'disabled'}: $medicationId');
       return true;
     } catch (e) {
-      print('Error toggling medication status: $e');
+      print('❌ Error toggling medication status: $e');
       return false;
     }
   }
 
   /// Sync ALL medications from Firestore to RTDB
-  /// (Useful for initial setup or after bulk changes)
   static Future<void> syncAllMedicationsToRTDB() async {
     try {
+      print('🔄 Starting full sync to RTDB...');
+      print('📍 Current User ID: $currentUserId');
+
       final snapshot = await _firestore
           .collection('users')
           .doc(currentUserId)
           .collection('medications')
           .get();
 
-      // Clear old RTDB data
-      await _rtdb.ref('medications/$currentUserId').remove();
+      print('📦 Found ${snapshot.docs.length} medications in Firestore');
 
-      // Sync each medication
-      for (var doc in snapshot.docs) {
-        final medication = MedicationModel.fromMap(doc.id, doc.data());
-        await _syncMedicationToRTDB(doc.id, medication);
+      if (snapshot.docs.isEmpty) {
+        print('⚠️  No medications to sync!');
+        return;
       }
 
-      print('Synced ${snapshot.docs.length} medications to RTDB');
+      // Clear old RTDB data first
+      await _rtdb.ref('medications/$currentUserId').remove();
+      print('🗑️  Cleared old RTDB data');
+
+      // Sync each medication with detailed logging
+      int successCount = 0;
+      for (var doc in snapshot.docs) {
+        try {
+          final medicationId = doc.id;
+          final data = doc.data();
+
+          print('');
+          print('📤 Syncing medication:');
+          print('   ID: $medicationId');
+          print('   Name: ${data['name']}');
+          print('   Time: ${data['time']}');
+          print('   Slot: ${data['slotNumber']}');
+          print('   Enabled: ${data['enabled']}');
+          print('   Quantity: ${data['quantity']}');
+
+          // Write to RTDB
+          final rtdbPath = 'medications/$currentUserId/$medicationId';
+          await _rtdb.ref(rtdbPath).set(data);
+
+          print('   ✅ Written to: $rtdbPath');
+          successCount++;
+
+        } catch (e) {
+          print('   ❌ Failed to sync ${doc.id}: $e');
+        }
+      }
+
+      print('');
+      print('========================================');
+      print('✅ Sync Complete!');
+      print('   Total: ${snapshot.docs.length}');
+      print('   Success: $successCount');
+      print('   Failed: ${snapshot.docs.length - successCount}');
+      print('   Path: medications/$currentUserId');
+      print('========================================');
+
     } catch (e) {
-      print('Error syncing all medications: $e');
+      print('❌ Error syncing all medications: $e');
+      print('Stack trace:');
+      print(e);
     }
   }
 
@@ -251,16 +216,22 @@ class FirebaseService {
       // ESP32 expects slot numbers 1, 2, 3 (1-based)
       final commandValue = slotNumber + 1;
 
-      print('📤 Sending dispense command: Slot $commandValue');
+      print('');
+      print('========================================');
+      print('📤 SENDING DISPENSE COMMAND');
+      print('Medication: $medicationName');
+      print('Slot Number: $slotNumber (0-based)');
+      print('Command Value: $commandValue (1-based for ESP32)');
+      print('========================================');
 
+      // Send command to RTDB
       await _rtdb.ref('commands/device_001/dispense').set(commandValue);
 
-      print('✅ Command sent successfully!');
+      print('✅ Command sent to: commands/device_001/dispense');
+      print('Value: $commandValue');
 
       // Log command to Firestore for history
-      await _firestore
-          .collection('command_logs')
-          .add({
+      await _firestore.collection('command_logs').add({
         'medicationId': medicationId,
         'medicationName': medicationName,
         'slotNumber': slotNumber,
@@ -276,39 +247,86 @@ class FirebaseService {
     }
   }
 
-  /// Listen to ESP32 status from RTDB
+  /// Check ESP32 connection status
+  static Future<Map<String, dynamic>> getESP32Status() async {
+    try {
+      final snapshot = await _rtdb.ref('esp32_status/device_001').get();
+
+      if (snapshot.exists) {
+        final data = Map<String, dynamic>.from(snapshot.value as Map);
+        print('📊 ESP32 Status: $data');
+        return data;
+      }
+
+      print('⚠️  No ESP32 status found');
+      return {'connected': false};
+    } catch (e) {
+      print('❌ Error getting ESP32 status: $e');
+      return {'connected': false, 'error': e.toString()};
+    }
+  }
+
+  /// Listen to ESP32 status updates
   static Stream<Map<String, dynamic>> getESP32StatusStream() {
-    return _rtdb.ref('status/device_001').onValue.map((event) {
+    return _rtdb.ref('esp32_status/device_001').onValue.map((event) {
       if (event.snapshot.value != null) {
         return Map<String, dynamic>.from(event.snapshot.value as Map);
       }
-      return {};
+      return {'connected': false};
     });
   }
 
-  /// Check if ESP32 is connected
-  static Future<bool> isESP32Connected() async {
+  // ==================== USER MANAGEMENT (FIRESTORE) ====================
+
+  static Future<bool> saveUserProfile(UserModel user) async {
     try {
-      final snapshot = await _rtdb.ref('status/device_001/lastSeen').get();
-      if (snapshot.exists) {
-        final lastSeen = snapshot.value as int;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        return (now - lastSeen) < 60000; // Connected if seen in last 60s
-      }
-      return false;
+      await _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .set(user.toMap(), SetOptions(merge: true));
+      return true;
     } catch (e) {
-      print('Error checking ESP32 status: $e');
+      print('Error saving user profile: $e');
       return false;
     }
   }
 
+  static Future<UserModel?> getUserProfile() async {
+    try {
+      final doc = await _firestore
+          .collection('users')
+          .doc(currentUserId)
+          .get();
+
+      if (doc.exists) {
+        return UserModel.fromMap(doc.data()!);
+      }
+      return null;
+    } catch (e) {
+      print('Error getting user profile: $e');
+      return null;
+    }
+  }
+
+  static Stream<UserModel?> getUserProfileStream() {
+    return _firestore
+        .collection('users')
+        .doc(currentUserId)
+        .snapshots()
+        .map((doc) {
+      if (doc.exists) {
+        return UserModel.fromMap(doc.data()!);
+      }
+      return null;
+    });
+  }
+
   // ==================== MEDICATION LOGS (FIRESTORE) ====================
 
-  /// Log medication taken to Firestore
   static Future<bool> logMedicationTaken(
       String medicationId,
       String medicationName,
-      String status, // 'taken', 'missed', 'skipped'
+      String status,
       ) async {
     try {
       await _firestore
@@ -330,94 +348,70 @@ class FirebaseService {
     }
   }
 
-  /// Get logs for a specific date from Firestore
-  static Stream<List<Map<String, dynamic>>> getMedicationLogsStream(
-      DateTime date) {
-    final dateString = date.toIso8601String().split('T')[0];
-
-    return _firestore
-        .collection('users')
-        .doc(currentUserId)
-        .collection('medication_logs')
-        .where('date', isEqualTo: dateString)
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    });
-  }
-
-  /// Get all logs from Firestore
-  static Stream<List<Map<String, dynamic>>> getAllMedicationLogsStream() {
-    return _firestore
-        .collection('users')
-        .doc(currentUserId)
-        .collection('medication_logs')
-        .orderBy('timestamp', descending: true)
-        .limit(100)
-        .snapshots()
-        .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-    });
-  }
-
-  // ==================== STATISTICS (FIRESTORE) ====================
-
-  /// Get medication adherence statistics
-  static Future<Map<String, int>> getMedicationStatistics(
-      DateTime startDate,
-      DateTime endDate,
-      ) async {
-    try {
-      final startDateStr = startDate.toIso8601String().split('T')[0];
-      final endDateStr = endDate.toIso8601String().split('T')[0];
-
-      final snapshot = await _firestore
-          .collection('users')
-          .doc(currentUserId)
-          .collection('medication_logs')
-          .where('date', isGreaterThanOrEqualTo: startDateStr)
-          .where('date', isLessThanOrEqualTo: endDateStr)
-          .get();
-
-      int taken = 0;
-      int missed = 0;
-      int skipped = 0;
-
-      for (var doc in snapshot.docs) {
-        final status = doc.data()['status'] as String;
-        if (status == 'taken') taken++;
-        if (status == 'missed') missed++;
-        if (status == 'skipped') skipped++;
-      }
-
-      return {
-        'taken': taken,
-        'missed': missed,
-        'skipped': skipped,
-        'total': taken + missed + skipped,
-      };
-    } catch (e) {
-      print('Error getting statistics: $e');
-      return {'taken': 0, 'missed': 0, 'skipped': 0, 'total': 0};
-    }
-  }
-
   // ==================== UTILITY ====================
 
   /// Force full sync from Firestore to RTDB
-  /// Call this when ESP32 first connects or after app reinstall
   static Future<void> forceFullSync() async {
-    print('Starting full sync...');
+    print('');
+    print('🔄 FORCE FULL SYNC INITIATED');
     await syncAllMedicationsToRTDB();
-    print('Full sync complete!');
+    print('✅ FORCE FULL SYNC COMPLETE');
+    print('');
+  }
+
+  /// Debug: Print current RTDB structure
+  static Future<void> debugPrintRTDB() async {
+    try {
+      print('');
+      print('========================================');
+      print('🔍 DEBUGGING RTDB STRUCTURE');
+      print('========================================');
+
+      // Check medications
+      final medsSnapshot = await _rtdb.ref('medications/$currentUserId').get();
+      if (medsSnapshot.exists) {
+        print('📦 Medications found:');
+        final medsMap = Map<String, dynamic>.from(medsSnapshot.value as Map);
+        medsMap.forEach((key, value) {
+          print('   ID: $key');
+          if (value is Map) {
+            final med = Map<String, dynamic>.from(value);
+            print('      Name: ${med['name']}');
+            print('      Time: ${med['time']}');
+            print('      Slot: ${med['slotNumber']}');
+            print('      Enabled: ${med['enabled']}');
+          }
+        });
+      } else {
+        print('❌ No medications found in RTDB!');
+      }
+
+      // Check commands
+      final cmdSnapshot = await _rtdb.ref('commands/device_001').get();
+      if (cmdSnapshot.exists) {
+        print('');
+        print('📨 Commands found:');
+        print(cmdSnapshot.value);
+      } else {
+        print('');
+        print('📭 No commands in RTDB');
+      }
+
+      // Check ESP32 status
+      final statusSnapshot = await _rtdb.ref('esp32_status/device_001').get();
+      if (statusSnapshot.exists) {
+        print('');
+        print('📊 ESP32 Status:');
+        print(statusSnapshot.value);
+      } else {
+        print('');
+        print('⚠️  No ESP32 status in RTDB');
+      }
+
+      print('========================================');
+      print('');
+    } catch (e) {
+      print('❌ Error debugging RTDB: $e');
+    }
   }
 }
