@@ -27,7 +27,7 @@ dependencies:
   google_sign_in: ^6.2.1
   flutter_facebook_auth: ^7.1.1
 
-  # Camera & Audio
+  # Camera, Audio & Permissions - UPDATED
   webview_flutter: ^4.4.2
   flutter_sound: ^9.2.13
   permission_handler: ^11.1.0
