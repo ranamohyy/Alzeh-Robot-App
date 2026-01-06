@@ -1,4 +1,4 @@
-// lib/core/services/audio_recording_service.dart
+// lib/core/services/audio_recording_service.dart - FIXED
 
 import 'dart:io';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -20,14 +20,12 @@ class AudioRecordingService {
     if (_isRecorderInitialized) return true;
 
     try {
-      // Request microphone permission
       final status = await Permission.microphone.request();
       if (!status.isGranted) {
         print('❌ Microphone permission denied');
         return false;
       }
 
-      // Open recorder
       await _recorder.openRecorder();
       _isRecorderInitialized = true;
 
@@ -48,17 +46,15 @@ class AudioRecordingService {
         if (!success) return false;
       }
 
-      // Get temporary directory
       final dir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       _currentRecordingPath = '${dir.path}/recording_$timestamp.wav';
 
-      // Start recording
       await _recorder.startRecorder(
         toFile: _currentRecordingPath,
-        codec: Codec.pcm16WAV, // WAV format for ESP32
-        sampleRate: 16000, // 16kHz sample rate
-        numChannels: 1, // Mono
+        codec: Codec.pcm16WAV,
+        sampleRate: 16000,
+        numChannels: 1,
       );
 
       print('🎤 Recording started: $_currentRecordingPath');
@@ -97,6 +93,7 @@ class AudioRecordingService {
     }
   }
 
+  // FIXED: Changed to static getter
   static bool get isRecording => _recorder.isRecording;
 
   // ==================== UPLOAD TO ESP32 ====================
@@ -114,13 +111,11 @@ class AudioRecordingService {
       print('Filename: $filename');
       print('========================================');
 
-      // Create multipart request
       final request = http.MultipartRequest(
         'POST',
         Uri.parse('http://$esp32AudioIP/upload'),
       );
 
-      // Add file
       request.files.add(
         await http.MultipartFile.fromPath(
           'file',
@@ -129,7 +124,6 @@ class AudioRecordingService {
         ),
       );
 
-      // Send request
       print('Sending...');
       final response = await request.send().timeout(
         const Duration(seconds: 30),
@@ -209,9 +203,7 @@ class AudioRecordingService {
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
-        // Parse JSON array of filenames
         final List<dynamic> files = [];
-        // Add parsing logic here based on ESP32 response format
         return files.cast<String>();
       }
 
@@ -227,7 +219,7 @@ class AudioRecordingService {
 
   static Future<void> dispose() async {
     try {
-      if (_isRecording) {
+      if (_recorder.isRecording) {
         await _recorder.stopRecorder();
       }
       await _recorder.closeRecorder();

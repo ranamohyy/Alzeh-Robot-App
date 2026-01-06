@@ -1,4 +1,4 @@
-// lib/core/resources/barallel.dart
+// lib/core/resources/barallel.dart - FIXED AMBIGUOUS EXPORT
 
 export 'package:alzeh/core/resources/app_button.dart';
 export 'package:alzeh/core/resources/app_form_field.dart';
@@ -24,7 +24,6 @@ export 'package:alzeh/core/resources/app_spaces.dart';
 export 'package:alzeh/features/widgets/check_state_section.dart';
 export 'package:alzeh/features/widgets/header_home_section.dart';
 export 'package:alzeh/features/widgets/quick_access_section.dart';
-export 'package:alzeh/features/widgets/todays_doses_section.dart';
 export 'package:alzeh/features/accessability/camera.dart';
 export 'package:alzeh/features/accessability/manual_change.dart';
 export 'package:alzeh/features/accessability/microphone_screen.dart';
@@ -40,11 +39,9 @@ export 'package:alzeh/features/widgets/label_field.dart';
 export 'package:alzeh/features/on_boarding/on_boarding.dart';
 export 'package:alzeh/features/widgets/medicine_with_card.dart';
 export 'dart:io';
-export 'package:alzeh/features/widgets/photo_card.dart';
+// REMOVED: Ambiguous PhotoCard export - use specific imports instead
 export 'package:alzeh/features/model/medication_model.dart';
 export 'package:alzeh/core/services/firebase_service.dart';
 export 'package:alzeh/features/medication/add_edit_medication_screen.dart';
 export 'package:alzeh/features/medication/medication_list_screen.dart';
-
-// NEW: Add Firestore service
 export 'package:alzeh/core/services/firestore_service.dart';

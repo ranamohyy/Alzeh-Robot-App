@@ -1,5 +1,6 @@
-// lib/features/accessability/camera.dart - UPDATED
+// lib/features/accessability/camera.dart - FIXED PhotoCard naming
 
+import 'dart:io';
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/camera_service.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -14,7 +15,7 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   bool isMonitoring = false;
   bool isStreaming = false;
-  List<PhotoItem> photos = [];
+  List<CapturedPhoto> photos = []; // RENAMED from PhotoItem
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +121,7 @@ class _CameraScreenState extends State<CameraScreen> {
                 style: AppStyles.kTextStyle18Primary,
               ),
 
-              ...photos.map((photo) => PhotoCard(
+              ...photos.map((photo) => CameraPhotoCard(
                 photo.time,
                 photo.date,
                 imageFile: photo.file,
@@ -161,10 +162,8 @@ class _CameraScreenState extends State<CameraScreen> {
 
     if (photo == null) return;
 
-    // Show note dialog
     final note = await _showNoteDialog();
 
-    // Show upload dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -180,17 +179,16 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
     );
 
-    // Upload
     final success = await CameraService.uploadToESP32(photo, note: note);
 
     if (mounted) {
-      Navigator.pop(context); // Close loading
+      Navigator.pop(context);
 
       if (success) {
         setState(() {
           photos.insert(
             0,
-            PhotoItem(
+            CapturedPhoto(
               file: photo,
               time: TimeOfDay.now().format(context),
               date: '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
@@ -305,13 +303,14 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 }
 
-class PhotoItem {
+// RENAMED class to avoid conflict
+class CapturedPhoto {
   final File file;
   final String time;
   final String date;
   final String? note;
 
-  PhotoItem({
+  CapturedPhoto({
     required this.file,
     required this.time,
     required this.date,
@@ -319,9 +318,9 @@ class PhotoItem {
   });
 }
 
-// Update PhotoCard widget to accept File
-class PhotoCard extends StatelessWidget {
-  const PhotoCard(this.time, this.date, {super.key, this.imageFile});
+// RENAMED widget to avoid conflict with photo_card.dart
+class CameraPhotoCard extends StatelessWidget {
+  const CameraPhotoCard(this.time, this.date, {super.key, this.imageFile});
 
   final String time;
   final String date;

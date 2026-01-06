@@ -1,9 +1,10 @@
-// lib/features/accessability/microphone_screen.dart - UPDATED
+// lib/features/accessability/microphone_screen.dart - FIXED
 
+import 'dart:async'; // ADDED THIS IMPORT
+import 'dart:io';
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/audio_recording_service.dart';
 import 'package:alzeh/features/widgets/record_button.dart';
-import 'dart:io';
 
 class MicrophoneScreen extends StatefulWidget {
   const MicrophoneScreen({super.key});
@@ -19,7 +20,7 @@ class _MicrophoneScreenState extends State<MicrophoneScreen> {
   File? lastRecording;
 
   int _seconds = 0;
-  Timer? _timer;
+  Timer? _timer; // NOW Timer is defined
 
   @override
   void initState() {
@@ -77,7 +78,6 @@ class _MicrophoneScreenState extends State<MicrophoneScreen> {
     });
 
     if (file != null) {
-      // Show upload dialog
       _showUploadDialog(file);
     }
   }
@@ -157,7 +157,7 @@ class _MicrophoneScreenState extends State<MicrophoneScreen> {
     final success = await AudioRecordingService.uploadToESP32(audioFile);
 
     if (mounted) {
-      Navigator.pop(context); // Close loading dialog
+      Navigator.pop(context);
 
       setState(() {
         isUploading = false;
@@ -255,7 +255,6 @@ class _MicrophoneScreenState extends State<MicrophoneScreen> {
             lastRecording!,
           ),
 
-        // You can add more saved recordings here
         const RecordingCardItem('Sample 1', '12 Oct 2025', '01:33'),
         const RecordingCardItem('Sample 2', '12 Oct 2025', '02:15'),
       ],
