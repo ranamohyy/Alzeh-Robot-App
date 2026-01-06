@@ -8,7 +8,7 @@ class CameraService {
   static final ImagePicker _picker = ImagePicker();
 
   // ESP32 Camera IP (UPDATE THIS!)
-  static String esp32CameraIP = "192.168.1.101"; // ⚠️ CHANGE TO YOUR ESP32-3 IP
+  static String esp32CameraIP = "192.168.1.3"; // ⚠️ CHANGE TO YOUR ESP32-3 IP
 
   // ==================== TAKE PHOTO ====================
 
@@ -234,7 +234,7 @@ class CameraService {
   static Future<bool> captureManualPhoto() async {
     try {
       final response = await http.post(
-        Uri.parse('http://$esp32CameraIP/capture'),
+        Uri.parse('http://$esp32CameraIP'),
       ).timeout(const Duration(seconds: 10));
 
       return response.statusCode == 200;

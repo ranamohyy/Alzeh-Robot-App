@@ -1,9 +1,10 @@
-// lib/features/accessability/camera.dart - FIXED PhotoCard naming
+// lib/features/accessability/camera.dart - CONTINUOUS STREAMING VERSION
 
 import 'dart:io';
+import 'dart:async';
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/camera_service.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:flutter/material.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -15,7 +16,24 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen> {
   bool isMonitoring = false;
   bool isStreaming = false;
-  List<CapturedPhoto> photos = []; // RENAMED from PhotoItem
+  List<CapturedPhoto> photos = [];
+
+  // For continuous streaming
+  String? streamUrl;
+  Timer? _refreshTimer;
+  int _frameCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    streamUrl = CameraService.getStreamUrl();
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +61,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     WidthSpace(12),
                     Expanded(
                       child: Text(
-                        'Take photos and monitor patient during pill time',
+                        'Continuous live streaming from ESP32-CAM',
                         style: TextStyle(
                           fontSize: 12.sp,
                           color: Colors.blue.shade700,
@@ -54,64 +72,219 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
               ),
 
-              // Take Photo Button
-              ElevatedButton.icon(
-                onPressed: _takePhoto,
-                icon: const Icon(Icons.camera_alt),
-                label: const Text('Take Photo'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryColor,
-                  foregroundColor: Colors.white,
-                  minimumSize: Size(double.infinity, 50.h),
-                ),
-              ),
-
-              // Start/Stop Monitoring
-              ElevatedButton.icon(
-                onPressed: isMonitoring ? _stopMonitoring : _startMonitoring,
-                icon: Icon(isMonitoring ? Icons.stop : Icons.play_arrow),
-                label: Text(isMonitoring ? 'Stop Monitoring' : 'Start Auto Monitoring'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isMonitoring ? Colors.red : Colors.green,
-                  foregroundColor: Colors.white,
-                  minimumSize: Size(double.infinity, 50.h),
-                ),
-              ),
-
-              // Live Stream Toggle
-              if (isMonitoring)
+              // Live Stream View (Always visible option)
+              if (!isStreaming)
                 ElevatedButton.icon(
                   onPressed: () {
                     setState(() {
-                      isStreaming = !isStreaming;
+                      isStreaming = true;
+                      _startFrameCounter();
                     });
                   },
-                  icon: Icon(isStreaming ? Icons.videocam_off : Icons.videocam),
-                  label: Text(isStreaming ? 'Hide Stream' : 'Show Live Stream'),
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Start Live Stream'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
                     minimumSize: Size(double.infinity, 50.h),
                   ),
                 ),
 
-              // Live Stream View
-              if (isStreaming)
+              // Live Stream Container
+              if (isStreaming) ...[
                 Container(
-                  height: 300.h,
                   decoration: BoxDecoration(
                     border: Border.all(color: Colors.blue, width: 2),
                     borderRadius: BorderRadius.circular(12.r),
+                    color: Colors.black,
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10.r),
-                    child: WebViewWidget(
-                      controller: WebViewController()
-                        ..setJavaScriptMode(JavaScriptMode.unrestricted)
-                        ..loadRequest(
-                          Uri.parse(CameraService.getStreamUrl()),
+                  child: Column(
+                    children: [
+                      // Stream Header
+                      Container(
+                        padding: EdgeInsets.all(8.r),
+                        decoration: BoxDecoration(
+                          color: Colors.blue,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(10.r),
+                            topRight: Radius.circular(10.r),
+                          ),
                         ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10.w,
+                                  height: 10.h,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                WidthSpace(8),
+                                Text(
+                                  'LIVE',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14.sp,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              'Frames: $_frameCount',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12.sp,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // MJPEG Stream View
+                      ClipRRect(
+                        borderRadius: BorderRadius.only(
+                          bottomLeft: Radius.circular(10.r),
+                          bottomRight: Radius.circular(10.r),
+                        ),
+                        child: Container(
+                          height: 300.h,
+                          color: Colors.black,
+                          child: Image.network(
+                            '$streamUrl?timestamp=${DateTime.now().millisecondsSinceEpoch}',
+                            fit: BoxFit.contain,
+                            loadingBuilder: (context, child, loadingProgress) {
+                              if (loadingProgress == null) return child;
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    CircularProgressIndicator(
+                                      color: Colors.white,
+                                    ),
+                                    HeightSpace(16),
+                                    Text(
+                                      'Connecting to camera...',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                            errorBuilder: (context, error, stackTrace) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.error_outline,
+                                      color: Colors.red,
+                                      size: 48.r,
+                                    ),
+                                    HeightSpace(16),
+                                    Text(
+                                      'Stream Error',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    HeightSpace(8),
+                                    Text(
+                                      'Check ESP32-CAM connection',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12.sp,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Stream Controls
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            isStreaming = false;
+                            _stopFrameCounter();
+                          });
+                        },
+                        icon: const Icon(Icons.stop, size: 18),
+                        label: const Text('Stop Stream'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                     ),
+                    WidthSpace(8),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _captureSnapshot,
+                        icon: const Icon(Icons.camera_alt, size: 18),
+                        label: const Text('Snapshot'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+
+              // Monitoring Controls
+              ElevatedButton.icon(
+                onPressed: isMonitoring ? _stopMonitoring : _startMonitoring,
+                icon: Icon(isMonitoring ? Icons.stop : Icons.play_arrow),
+                label: Text(
+                  isMonitoring
+                      ? 'Stop Auto Monitoring'
+                      : 'Start Auto Monitoring (Motion Detection)',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isMonitoring ? Colors.red : Colors.orange,
+                  foregroundColor: Colors.white,
+                  minimumSize: Size(double.infinity, 50.h),
+                ),
+              ),
+
+              if (isMonitoring)
+                Container(
+                  padding: EdgeInsets.all(12.r),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: Colors.orange.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.motion_photos_on, color: Colors.orange.shade700),
+                      WidthSpace(12),
+                      Expanded(
+                        child: Text(
+                          'Motion detection active - Images saved automatically',
+                          style: TextStyle(
+                            fontSize: 12.sp,
+                            color: Colors.orange.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -147,6 +320,14 @@ class _CameraScreenState extends State<CameraScreen> {
                         'No photos yet',
                         style: AppStyles.kTextStyle16Grey,
                       ),
+                      HeightSpace(8),
+                      Text(
+                        'Tap Snapshot while streaming',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: Colors.grey,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -157,13 +338,23 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  Future<void> _takePhoto() async {
-    final photo = await CameraService.takePhoto();
+  void _startFrameCounter() {
+    _frameCount = 0;
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (mounted) {
+        setState(() {
+          _frameCount++;
+        });
+      }
+    });
+  }
 
-    if (photo == null) return;
+  void _stopFrameCounter() {
+    _refreshTimer?.cancel();
+    _frameCount = 0;
+  }
 
-    final note = await _showNoteDialog();
-
+  Future<void> _captureSnapshot() async {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -173,72 +364,47 @@ class _CameraScreenState extends State<CameraScreen> {
           children: [
             const CircularProgressIndicator(),
             HeightSpace(16),
-            const Text('Processing photo...'),
+            const Text('Capturing snapshot...'),
           ],
         ),
       ),
     );
 
-    final success = await CameraService.uploadToESP32(photo, note: note);
+    // Get single frame from ESP32
+    final success = await CameraService.captureManualPhoto();
 
     if (mounted) {
       Navigator.pop(context);
 
       if (success) {
+        final now = DateTime.now();
         setState(() {
           photos.insert(
             0,
             CapturedPhoto(
-              file: photo,
+              file: null, // We'll fetch from ESP32 if needed
               time: TimeOfDay.now().format(context),
-              date: '${DateTime.now().day}/${DateTime.now().month}/${DateTime.now().year}',
-              note: note,
+              date: '${now.day}/${now.month}/${now.year}',
+              note: 'Snapshot from live stream',
             ),
           );
         });
 
-        await showSuccessDialog(
-          context,
-          '✓ Photo Saved!\n\n${note ?? 'No note added'}',
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✓ Snapshot saved!'),
+            backgroundColor: Colors.green,
+          ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('❌ Photo save failed'),
+            content: Text('❌ Snapshot failed'),
             backgroundColor: Colors.red,
           ),
         );
       }
     }
-  }
-
-  Future<String?> _showNoteDialog() async {
-    final controller = TextEditingController();
-
-    return await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Note'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Optional note about this photo...',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 3,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Skip'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _startMonitoring() async {
@@ -265,6 +431,10 @@ class _CameraScreenState extends State<CameraScreen> {
       if (success) {
         setState(() {
           isMonitoring = true;
+          if (!isStreaming) {
+            isStreaming = true;
+            _startFrameCounter();
+          }
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -289,7 +459,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
     setState(() {
       isMonitoring = false;
-      isStreaming = false;
     });
 
     if (mounted) {
@@ -303,9 +472,9 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 }
 
-// RENAMED class to avoid conflict
+// Photo data class
 class CapturedPhoto {
-  final File file;
+  final File? file;
   final String time;
   final String date;
   final String? note;
@@ -318,7 +487,7 @@ class CapturedPhoto {
   });
 }
 
-// RENAMED widget to avoid conflict with photo_card.dart
+// Photo card widget
 class CameraPhotoCard extends StatelessWidget {
   const CameraPhotoCard(this.time, this.date, {super.key, this.imageFile});
 

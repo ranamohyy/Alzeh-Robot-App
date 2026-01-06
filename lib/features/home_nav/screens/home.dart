@@ -1,4 +1,7 @@
+// lib/features/home_nav/screens/home.dart - FIXED
+
 import 'package:alzeh/core/resources/barallel.dart';
+import 'package:alzeh/features/widgets/todays_doses_section.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -17,10 +20,10 @@ class HomeScreen extends StatelessWidget {
               TodaysDosesSection(),
               CheckStateSection(),
               Center(
-                child: Text('Next dose in 00 : 00 : 35',
-                    style: AppStyles.kTextStyle14primary
-                    //  TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
+                child: Text(
+                  'Next dose in 00 : 00 : 35',
+                  style: AppStyles.kTextStyle14primary,
+                ),
               ),
               QuickAccessSection()
             ],
