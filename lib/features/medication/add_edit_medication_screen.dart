@@ -1,5 +1,4 @@
-// lib/features/medication/add_edit_medication_screen.dart - FIXED
-// Now saves to RTDB (same source as ESP32 reads from)
+// lib/features/medication/add_edit_medication_screen.dart - UPDATED
 
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/firebase_service.dart';
@@ -19,13 +18,22 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _timeController = TextEditingController();
-  final _frequencyController = TextEditingController();
-  final _quantityController = TextEditingController();
+  final _totalPillsController = TextEditingController();
+  final _pillsToDispenseController = TextEditingController();
 
   bool _isLoading = false;
   String _selectedUnit = 'pills';
+  String _selectedFrequency = 'daily';
   int _selectedSlot = 0;
   TimeOfDay? _selectedTime;
+
+  // Frequency options
+  final List<Map<String, String>> _frequencyOptions = [
+    {'value': 'daily', 'label': 'Daily', 'icon': '📅'},
+    {'value': 'weekly', 'label': 'Weekly', 'icon': '📆'},
+    {'value': 'monthly', 'label': 'Monthly', 'icon': '🗓️'},
+    {'value': 'custom', 'label': 'Custom', 'icon': '⚙️'},
+  ];
 
   @override
   void initState() {
@@ -33,8 +41,9 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
     if (widget.medication != null) {
       _nameController.text = widget.medication!.name;
       _timeController.text = widget.medication!.time;
-      _frequencyController.text = widget.medication!.frequency;
-      _quantityController.text = widget.medication!.quantity.toString();
+      _selectedFrequency = widget.medication!.frequency;
+      _totalPillsController.text = widget.medication!.totalPills.toString();
+      _pillsToDispenseController.text = widget.medication!.pillsToDispense.toString();
       _selectedUnit = widget.medication!.unit;
       _selectedSlot = widget.medication!.slotNumber;
     }
@@ -69,34 +78,49 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
       return;
     }
 
+    // Validate pill counts
+    int totalPills = int.parse(_totalPillsController.text);
+    int toDispense = int.parse(_pillsToDispenseController.text);
+
+    if (toDispense > totalPills) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pills to dispense cannot exceed total pills!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     final medication = MedicationModel(
       id: widget.medication?.id,
       name: _nameController.text.trim(),
       time: _timeController.text,
-      frequency: _frequencyController.text.trim(),
-      quantity: int.parse(_quantityController.text),
+      frequency: _selectedFrequency,
+      totalPills: totalPills,
+      pillsToDispense: toDispense,
+      remainingPills: widget.medication?.remainingPills ?? totalPills, // Keep existing or use total
       unit: _selectedUnit,
       slotNumber: _selectedSlot,
       enabled: true,
+      lastRefillDate: widget.medication?.lastRefillDate ?? DateTime.now().millisecondsSinceEpoch,
     );
 
     bool success;
     String message;
 
     if (widget.medication == null) {
-      // Add new medication to RTDB
       final id = await FirebaseService.addMedication(medication);
       success = id != null;
       message = success
-          ? '✓ Medication added to RTDB\nESP32 will sync automatically'
+          ? '✓ Medication added!\nESP32 will sync automatically'
           : '❌ Failed to add medication';
     } else {
-      // Update existing medication in RTDB
       success = await FirebaseService.updateMedication(medication);
       message = success
-          ? '✓ Medication updated in RTDB\nESP32 will sync automatically'
+          ? '✓ Medication updated!\nESP32 will sync automatically'
           : '❌ Failed to update medication';
     }
 
@@ -148,7 +172,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                       WidthSpace(12),
                       Expanded(
                         child: Text(
-                          'Saved to Realtime Database\nESP32 syncs automatically',
+                          'Track pill inventory\nESP32 updates automatically',
                           style: TextStyle(
                             fontSize: 12.sp,
                             color: Colors.blue.shade700,
@@ -159,45 +183,60 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                   ),
                 ),
 
+                // Medication Name
                 _buildTextField(
                   controller: _nameController,
-                  label: 'Medicine Name',
-                  hint: 'Enter medicine name',
+                  label: 'Medication Name',
+                  hint: 'Enter medication name',
                   icon: Icons.medication,
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Please enter medicine name';
+                      return 'Please enter medication name';
                     }
                     return null;
                   },
                 ),
 
+                // Time
                 _buildTimeField(),
 
-                _buildTextField(
-                  controller: _frequencyController,
-                  label: 'Frequency',
-                  hint: 'e.g., Every 8 hours, Daily',
-                  icon: Icons.refresh,
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter frequency';
-                    }
-                    return null;
-                  },
-                ),
+                // Frequency Selector (NEW)
+                _buildFrequencySelector(),
 
+                // Slot Selection
                 _buildSlotDropdown(),
 
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: _buildTextField(
-                        controller: _quantityController,
-                        label: 'Quantity',
-                        hint: 'Number',
-                        icon: Icons.format_list_numbered,
+                // Pill Counts Section (NEW)
+                Container(
+                  padding: EdgeInsets.all(16.r),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12.r),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 16.h,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.inventory, color: Colors.orange.shade700),
+                          WidthSpace(8),
+                          Text(
+                            'Pill Inventory',
+                            style: AppStyles.kTextStyle18Primary.copyWith(
+                              color: Colors.orange.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      // Total Pills in Slot
+                      _buildTextField(
+                        controller: _totalPillsController,
+                        label: 'Total Pills in Slot',
+                        hint: 'e.g., 30',
+                        icon: Icons.inventory_2,
                         keyboardType: TextInputType.number,
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {
@@ -212,8 +251,61 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                           return null;
                         },
                       ),
-                    ),
-                    WidthSpace(16),
+
+                      // Pills to Dispense Per Time
+                      _buildTextField(
+                        controller: _pillsToDispenseController,
+                        label: 'Pills to Dispense (per time)',
+                        hint: 'e.g., 2',
+                        icon: Icons.medical_services,
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Required';
+                          }
+                          if (int.tryParse(value) == null) {
+                            return 'Invalid number';
+                          }
+                          if (int.parse(value) <= 0) {
+                            return 'Must be > 0';
+                          }
+                          return null;
+                        },
+                      ),
+
+                      // Current Remaining (if editing)
+                      if (widget.medication != null) ...[
+                        Divider(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Currently Remaining:',
+                              style: TextStyle(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            Text(
+                              '${widget.medication!.remainingPills} ${widget.medication!.unit}',
+                              style: TextStyle(
+                                fontSize: 16.sp,
+                                fontWeight: FontWeight.bold,
+                                color: widget.medication!.isLowStock
+                                    ? Colors.red
+                                    : AppColors.primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // Unit Selector
+                Row(
+                  children: [
                     Expanded(
                       child: _buildUnitDropdown(),
                     ),
@@ -226,8 +318,8 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
                     ? const Center(child: CircularProgressIndicator())
                     : AppButton(
                   hintText: widget.medication == null
-                      ? 'Add to RTDB'
-                      : 'Update RTDB',
+                      ? 'Add Medication'
+                      : 'Update Medication',
                   onPressed: _saveMedication,
                 ),
               ],
@@ -235,6 +327,80 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // Frequency Selector (NEW)
+  Widget _buildFrequencySelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Frequency', style: AppStyles.kTextStyle14primary),
+        HeightSpace(8),
+        Container(
+          padding: EdgeInsets.all(8.r),
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.grey[300]!),
+            borderRadius: BorderRadius.circular(12.r),
+          ),
+          child: Column(
+            spacing: 8.h,
+            children: _frequencyOptions.map((option) {
+              bool isSelected = _selectedFrequency == option['value'];
+              return InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedFrequency = option['value']!;
+                  });
+                },
+                child: Container(
+                  padding: EdgeInsets.all(12.r),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? AppColors.primaryColor.withOpacity(0.1)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8.r),
+                    border: Border.all(
+                      color: isSelected
+                          ? AppColors.primaryColor
+                          : Colors.grey[300]!,
+                      width: isSelected ? 2 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        option['icon']!,
+                        style: TextStyle(fontSize: 24.sp),
+                      ),
+                      WidthSpace(12),
+                      Expanded(
+                        child: Text(
+                          option['label']!,
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: isSelected
+                                ? AppColors.primaryColor
+                                : Colors.black,
+                          ),
+                        ),
+                      ),
+                      if (isSelected)
+                        Icon(
+                          Icons.check_circle,
+                          color: AppColors.primaryColor,
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 
@@ -311,10 +477,6 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
               borderRadius: BorderRadius.circular(12.r),
               borderSide: const BorderSide(color: AppColors.primaryColor),
             ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12.r),
-              borderSide: const BorderSide(color: Colors.red),
-            ),
           ),
         ),
       ],
@@ -325,7 +487,7 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Device Slot (ESP32)', style: AppStyles.kTextStyle14primary),
+        Text('Device Slot', style: AppStyles.kTextStyle14primary),
         HeightSpace(8),
         DropdownButtonFormField<int>(
           value: _selectedSlot,
@@ -345,63 +507,35 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
             ),
           ),
           items: [
-            DropdownMenuItem(
-              value: 0,
-              child: Row(
-                children: [
-                  Container(
-                    width: 12.w,
-                    height: 12.h,
-                    decoration: const BoxDecoration(
-                      color: Colors.blue,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  WidthSpace(8),
-                  const Text('Slot 1 (Motor 1)'),
-                ],
-              ),
-            ),
-            DropdownMenuItem(
-              value: 1,
-              child: Row(
-                children: [
-                  Container(
-                    width: 12.w,
-                    height: 12.h,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  WidthSpace(8),
-                  const Text('Slot 2 (Motor 2)'),
-                ],
-              ),
-            ),
-            DropdownMenuItem(
-              value: 2,
-              child: Row(
-                children: [
-                  Container(
-                    width: 12.w,
-                    height: 12.h,
-                    decoration: const BoxDecoration(
-                      color: Colors.orange,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  WidthSpace(8),
-                  const Text('Slot 3 (Motor 3)'),
-                ],
-              ),
-            ),
+            _buildSlotItem(0, 'Slot 1 (Motor 1)', Colors.blue),
+            _buildSlotItem(1, 'Slot 2 (Motor 2)', Colors.green),
+            _buildSlotItem(2, 'Slot 3 (Motor 3)', Colors.orange),
           ],
           onChanged: (value) {
             setState(() => _selectedSlot = value!);
           },
         ),
       ],
+    );
+  }
+
+  DropdownMenuItem<int> _buildSlotItem(int value, String label, Color color) {
+    return DropdownMenuItem(
+      value: value,
+      child: Row(
+        children: [
+          Container(
+            width: 12.w,
+            height: 12.h,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+            ),
+          ),
+          WidthSpace(8),
+          Text(label),
+        ],
+      ),
     );
   }
 
@@ -444,9 +578,9 @@ class _AddEditMedicationScreenState extends State<AddEditMedicationScreen> {
   @override
   void dispose() {
     _nameController.dispose();
-    _timeController.dispose();
-    _frequencyController.dispose();
-    _quantityController.dispose();
+    _timeController.text;dispose();
+    _totalPillsController.dispose();
+    _pillsToDispenseController.dispose();
     super.dispose();
   }
 }

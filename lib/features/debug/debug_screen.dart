@@ -1,4 +1,4 @@
-// lib/features/debug/debug_screen.dart
+// lib/features/debug/debug_screen.dart - ENHANCED
 
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/firebase_service.dart';
@@ -15,6 +15,56 @@ class _DebugScreenState extends State<DebugScreen> {
   bool _isLoading = false;
   String _output = 'Tap buttons below to debug...';
 
+  Future<void> _testConnection() async {
+    setState(() {
+      _isLoading = true;
+      _output = '🔍 Testing Firebase connections...\n\n';
+    });
+
+    try {
+      // Test RTDB
+      _updateOutput('Testing Realtime Database...');
+      final rtdbSuccess = await FirebaseService.testRTDBConnection();
+
+      if (rtdbSuccess) {
+        _updateOutput('✅ RTDB connection OK!');
+      } else {
+        _updateOutput('❌ RTDB connection FAILED!');
+        _updateOutput('Check Firebase Console > Realtime Database > Rules');
+      }
+
+      _updateOutput('\n---\n');
+
+      // Test Firestore
+      _updateOutput('Testing Firestore...');
+      try {
+        await FirebaseFirestore.instance
+            .collection('test')
+            .doc('connection')
+            .set({'timestamp': DateTime.now().toIso8601String()});
+        _updateOutput('✅ Firestore connection OK!');
+
+        await FirebaseFirestore.instance
+            .collection('test')
+            .doc('connection')
+            .delete();
+      } catch (e) {
+        _updateOutput('❌ Firestore connection FAILED: $e');
+        _updateOutput('Check Firebase Console > Firestore > Rules');
+      }
+
+      _updateOutput('\n---\n');
+      _updateOutput('User ID: ${FirebaseService.currentUserId}');
+
+    } catch (e) {
+      _updateOutput('❌ Connection test error: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   Future<void> _syncAll() async {
     setState(() {
       _isLoading = true;
@@ -29,23 +79,20 @@ class _DebugScreenState extends State<DebugScreen> {
           .collection('medications')
           .get();
 
-      setState(() {
-        _output += 'Found ${medsSnapshot.docs.length} medications in Firestore\n';
-      });
+      _updateOutput('Found ${medsSnapshot.docs.length} medications in Firestore');
 
-      // Do the sync
-      await FirebaseService.syncAllMedicationsToRTDB();
-
-      setState(() {
-        _output += '\n✅ Sync complete!\n';
-        _output += 'Check your ESP32 serial monitor now.\n';
-        _output += 'LCD should show medication data.';
-      });
+      if (medsSnapshot.docs.isEmpty) {
+        _updateOutput('\n⚠️  No medications to sync!');
+        _updateOutput('Add medications first using the + button');
+      } else {
+        // Do the sync
+        await FirebaseService.syncAllMedicationsToRTDB();
+        _updateOutput('\n✅ Sync complete!');
+        _updateOutput('Check ESP32 serial monitor now.');
+      }
 
     } catch (e) {
-      setState(() {
-        _output += '\n❌ Sync failed: $e';
-      });
+      _updateOutput('\n❌ Sync failed: $e');
     } finally {
       setState(() {
         _isLoading = false;
@@ -56,48 +103,78 @@ class _DebugScreenState extends State<DebugScreen> {
   Future<void> _debugRTDB() async {
     setState(() {
       _isLoading = true;
-      _output = 'Reading RTDB structure...';
+      _output = 'Reading RTDB structure...\n';
     });
 
     await FirebaseService.debugPrintRTDB();
 
+    _updateOutput('✅ Debug complete! Check console/logs for details.');
+
     setState(() {
       _isLoading = false;
-      _output = '✅ Debug complete! Check serial monitor/logs.';
     });
   }
 
   Future<void> _testCommand(int slot) async {
     setState(() {
       _isLoading = true;
-      _output = 'Sending test command for Slot $slot...';
+      _output = 'Sending test command for Slot $slot...\n';
     });
+
+    _updateOutput('Command will be sent to:');
+    _updateOutput('Path: commands/device_001/dispense');
+    _updateOutput('Value: $slot (ESP32 slot number)');
+    _updateOutput('\n---\n');
 
     final success = await FirebaseService.sendDispenseCommand(
       'test_id',
-      'Test Medication',
+      'Test Medication Slot $slot',
       slot - 1, // Convert to 0-based
     );
 
+    if (success) {
+      _updateOutput('✅ Command sent successfully!');
+      _updateOutput('\nNow check:');
+      _updateOutput('1. ESP32 Serial Monitor');
+      _updateOutput('2. Firebase Console > Realtime Database');
+      _updateOutput('3. Look for: commands/device_001/dispense = $slot');
+    } else {
+      _updateOutput('❌ Command failed!');
+      _updateOutput('Check RTDB permissions');
+    }
+
     setState(() {
       _isLoading = false;
-      _output = success
-          ? '✅ Command sent! Check ESP32 serial monitor.'
-          : '❌ Command failed!';
     });
   }
 
   Future<void> _checkESP32Status() async {
     setState(() {
       _isLoading = true;
-      _output = 'Checking ESP32 status...';
+      _output = 'Checking ESP32 status...\n';
     });
 
     final status = await FirebaseService.getESP32Status();
 
+    _updateOutput('ESP32 Status:');
+    _updateOutput(status.toString());
+
+    if (status['connected'] == false) {
+      _updateOutput('\n⚠️  ESP32 appears offline');
+      _updateOutput('Make sure:');
+      _updateOutput('1. ESP32 is powered on');
+      _updateOutput('2. WiFi is connected');
+      _updateOutput('3. Correct WiFi credentials in code');
+    }
+
     setState(() {
       _isLoading = false;
-      _output = 'ESP32 Status:\n${status.toString()}';
+    });
+  }
+
+  void _updateOutput(String text) {
+    setState(() {
+      _output += '\n$text';
     });
   }
 
@@ -121,14 +198,15 @@ class _DebugScreenState extends State<DebugScreen> {
                 color: Colors.black,
                 borderRadius: BorderRadius.circular(12.r),
               ),
-              height: 200.h,
+              height: 250.h,
               child: SingleChildScrollView(
                 child: Text(
                   _output,
                   style: TextStyle(
                     color: Colors.greenAccent,
                     fontFamily: 'Courier',
-                    fontSize: 12.sp,
+                    fontSize: 11.sp,
+                    height: 1.4,
                   ),
                 ),
               ),
@@ -137,11 +215,23 @@ class _DebugScreenState extends State<DebugScreen> {
             if (_isLoading)
               const Center(child: CircularProgressIndicator()),
 
+            // Test Connection Button (MOST IMPORTANT)
+            ElevatedButton.icon(
+              onPressed: _isLoading ? null : _testConnection,
+              icon: const Icon(Icons.wifi_tethering),
+              label: const Text('1. Test Connection (START HERE)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                minimumSize: Size(double.infinity, 55.h),
+              ),
+            ),
+
             // Sync Button
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _syncAll,
               icon: const Icon(Icons.sync),
-              label: const Text('Force Full Sync to RTDB'),
+              label: const Text('2. Force Full Sync to RTDB'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
@@ -153,7 +243,7 @@ class _DebugScreenState extends State<DebugScreen> {
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _debugRTDB,
               icon: const Icon(Icons.bug_report),
-              label: const Text('Debug RTDB Structure'),
+              label: const Text('3. Debug RTDB Structure'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
                 foregroundColor: Colors.white,
@@ -164,10 +254,10 @@ class _DebugScreenState extends State<DebugScreen> {
             // Check ESP32 Status
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _checkESP32Status,
-              icon: const Icon(Icons.wifi),
-              label: const Text('Check ESP32 Status'),
+              icon: const Icon(Icons.device_hub),
+              label: const Text('4. Check ESP32 Status'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: Colors.purple,
                 foregroundColor: Colors.white,
                 minimumSize: Size(double.infinity, 50.h),
               ),
@@ -228,40 +318,107 @@ class _DebugScreenState extends State<DebugScreen> {
               decoration: BoxDecoration(
                 color: Colors.blue.shade50,
                 borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: Colors.blue.shade300, width: 2),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 spacing: 8.h,
                 children: [
                   Text(
-                    '📝 Instructions:',
+                    '📝 Step-by-Step Debug Guide:',
                     style: AppStyles.kTextStyle16Black,
                   ),
+                  const Divider(),
+                  _buildStep('1', 'Tap "Test Connection" first'),
+                  _buildStep('2', 'Add medications using + button'),
+                  _buildStep('3', 'Tap "Force Full Sync"'),
+                  _buildStep('4', 'Check ESP32 serial monitor'),
+                  _buildStep('5', 'Test dispense commands'),
+                  const Divider(),
                   Text(
-                    '1. Tap "Force Full Sync" to sync medications',
-                    style: TextStyle(fontSize: 12.sp),
+                    '⚠️ If connection test fails:',
+                    style: TextStyle(
+                      fontSize: 12.sp,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.red,
+                    ),
+                  ),
+                  _buildStep('•', 'Check Firebase Rules (see below)'),
+                  _buildStep('•', 'Verify internet connection'),
+                  _buildStep('•', 'Check Firebase Console logs'),
+                ],
+              ),
+            ),
+
+            HeightSpace(10),
+
+            // Firebase Rules Info
+            Container(
+              padding: EdgeInsets.all(16.r),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12.r),
+                border: Border.all(color: Colors.orange.shade300, width: 2),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                spacing: 8.h,
+                children: [
+                  Text(
+                    '🔐 Required Firebase Rules:',
+                    style: AppStyles.kTextStyle16Black,
+                  ),
+                  const Divider(),
+                  Text(
+                    'Go to Firebase Console and set:',
+                    style: TextStyle(fontSize: 11.sp, fontWeight: FontWeight.bold),
+                  ),
+                  HeightSpace(4),
+                  Text(
+                    'Realtime Database Rules:',
+                    style: TextStyle(fontSize: 11.sp, color: Colors.blue.shade700),
                   ),
                   Text(
-                    '2. Tap "Debug RTDB" to see database structure',
-                    style: TextStyle(fontSize: 12.sp),
-                  ),
-                  Text(
-                    '3. Check logs/console for detailed output',
-                    style: TextStyle(fontSize: 12.sp),
-                  ),
-                  Text(
-                    '4. Test dispense commands for each slot',
-                    style: TextStyle(fontSize: 12.sp),
-                  ),
-                  Text(
-                    '5. Watch ESP32 serial monitor',
-                    style: TextStyle(fontSize: 12.sp),
+                    '{\n  "rules": {\n    "medications": {".read": true, ".write": true},\n    "commands": {".read": true, ".write": true}\n  }\n}',
+                    style: TextStyle(
+                      fontSize: 10.sp,
+                      fontFamily: 'Courier',
+                      color: Colors.black87,
+                    ),
                   ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildStep(String number, String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 2.h),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 20.w,
+            child: Text(
+              number,
+              style: TextStyle(
+                fontSize: 12.sp,
+                fontWeight: FontWeight.bold,
+                color: Colors.blue.shade700,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 12.sp),
+            ),
+          ),
+        ],
       ),
     );
   }

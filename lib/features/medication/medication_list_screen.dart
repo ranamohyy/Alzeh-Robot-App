@@ -1,5 +1,4 @@
-// lib/features/medication/medication_list_screen.dart - FIXED
-// Now correctly reads from RTDB (same source as ESP32)
+// lib/features/medication/medication_list_screen.dart - UPDATED WITH REFILL
 
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/firebase_service.dart';
@@ -31,7 +30,7 @@ class MedicationListScreen extends StatelessWidget {
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: StreamBuilder<List<MedicationModel>>(
-        stream: FirebaseService.getMedicationsStream(), // From RTDB
+        stream: FirebaseService.getMedicationsStream(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -79,14 +78,6 @@ class MedicationListScreen extends StatelessWidget {
                     'Tap + to add your first medication',
                     style: AppStyles.kTextStyle14primary,
                   ),
-                  HeightSpace(24),
-                  Text(
-                    'ESP32 will automatically sync',
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      color: Colors.grey,
-                    ),
-                  ),
                 ],
               ),
             );
@@ -109,7 +100,7 @@ class MedicationListScreen extends StatelessWidget {
                     WidthSpace(12),
                     Expanded(
                       child: Text(
-                        'ESP32 reads directly from this database',
+                        'ESP32 tracks pill counts automatically',
                         style: TextStyle(
                           fontSize: 12.sp,
                           color: Colors.blue.shade700,
@@ -143,7 +134,17 @@ class MedicationListCard extends StatelessWidget {
   final MedicationModel medication;
 
   Future<void> _dispenseMedication(BuildContext context) async {
-    // Show confirmation dialog
+    // Check if enough pills
+    if (medication.remainingPills < medication.pillsToDispense) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Not enough pills! Please refill the slot.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -156,7 +157,9 @@ class MedicationListCard extends StatelessWidget {
             HeightSpace(8),
             Text('Slot: ${medication.slotNumber + 1}'),
             HeightSpace(8),
-            Text('Quantity: ${medication.quantity} ${medication.unit}'),
+            Text('Will dispense: ${medication.pillsToDispense} ${medication.unit}'),
+            HeightSpace(8),
+            Text('Remaining after: ${medication.remainingPills - medication.pillsToDispense}'),
             HeightSpace(16),
             Text(
               'Send command to ESP32?',
@@ -182,7 +185,6 @@ class MedicationListCard extends StatelessWidget {
 
     if (confirm != true) return;
 
-    // Show loading
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -198,18 +200,15 @@ class MedicationListCard extends StatelessWidget {
       ),
     );
 
-    // Send command to RTDB (ESP32 listens here)
     final success = await FirebaseService.sendDispenseCommand(
       medication.id!,
       medication.name,
       medication.slotNumber,
     );
 
-    // Close loading
     if (context.mounted) Navigator.pop(context);
 
     if (success && context.mounted) {
-      // Log to Firestore
       await FirebaseService.logMedicationTaken(
         medication.id!,
         medication.name,
@@ -218,15 +217,109 @@ class MedicationListCard extends StatelessWidget {
 
       await showSuccessDialog(
         context,
-        '✓ Command Sent to ESP32!\n\nSlot ${medication.slotNumber + 1}: ${medication.name}\nQuantity: ${medication.quantity} ${medication.unit}\n\nESP32 will dispense now...',
+        '✓ Command Sent!\n\nESP32 dispensing ${medication.pillsToDispense} ${medication.unit}',
       );
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('❌ Failed to send command to ESP32'),
+          content: Text('❌ Failed to send command'),
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _refillSlot(BuildContext context) async {
+    final controller = TextEditingController(
+      text: medication.totalPills.toString(),
+    );
+
+    final newTotal = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Refill Slot'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Medication: ${medication.name}'),
+            HeightSpace(8),
+            Text('Slot: ${medication.slotNumber + 1}'),
+            HeightSpace(16),
+            Text(
+              'Current: ${medication.remainingPills} ${medication.unit}',
+              style: TextStyle(
+                color: medication.isLowStock ? Colors.red : Colors.green,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            HeightSpace(16),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: InputDecoration(
+                labelText: 'New Total Pills',
+                hintText: 'Enter total pills added',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final value = int.tryParse(controller.text);
+              if (value != null && value > 0) {
+                Navigator.pop(context, value);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+            ),
+            child: const Text('Refill', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (newTotal != null && context.mounted) {
+      final updated = medication.copyWith(
+        totalPills: newTotal,
+        remainingPills: newTotal,
+        lastRefillDate: DateTime.now().millisecondsSinceEpoch,
+      );
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const AlertDialog(
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Updating inventory...'),
+            ],
+          ),
+        ),
+      );
+
+      final success = await FirebaseService.updateMedication(updated);
+
+      if (context.mounted) Navigator.pop(context);
+
+      if (success && context.mounted) {
+        await showSuccessDialog(
+          context,
+          '✓ Slot Refilled!\n\nNew total: $newTotal ${medication.unit}',
+        );
+      }
     }
   }
 
@@ -255,7 +348,7 @@ class MedicationListCard extends StatelessWidget {
       if (success && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${medication.name} deleted from RTDB'),
+            content: Text('${medication.name} deleted'),
             backgroundColor: Colors.green,
           ),
         );
@@ -294,9 +387,9 @@ class MedicationListCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           spacing: 12.h,
           children: [
+            // Header Row
             Row(
               children: [
-                // Slot indicator
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
                   decoration: BoxDecoration(
@@ -331,23 +424,90 @@ class MedicationListCard extends StatelessWidget {
                 ),
               ],
             ),
-            _buildInfoRow(Icons.access_time, 'Time', medication.time),
-            _buildInfoRow(Icons.refresh, 'Frequency', medication.frequency),
-            _buildInfoRow(
-              Icons.medication,
-              'Dosage',
-              '${medication.quantity} ${medication.unit}',
+
+            // Pill Inventory (NEW)
+            Container(
+              padding: EdgeInsets.all(12.r),
+              decoration: BoxDecoration(
+                color: medication.isLowStock
+                    ? Colors.red.shade50
+                    : Colors.green.shade50,
+                borderRadius: BorderRadius.circular(8.r),
+                border: Border.all(
+                  color: medication.isLowStock
+                      ? Colors.red.shade200
+                      : Colors.green.shade200,
+                ),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    spacing: 4.h,
+                    children: [
+                      Text(
+                        'Pills Remaining',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      Text(
+                        '${medication.remainingPills} / ${medication.totalPills}',
+                        style: TextStyle(
+                          fontSize: 20.sp,
+                          fontWeight: FontWeight.bold,
+                          color: medication.isLowStock
+                              ? Colors.red
+                              : Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    children: [
+                      Icon(
+                        medication.isLowStock
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle,
+                        color: medication.isLowStock
+                            ? Colors.red
+                            : Colors.green,
+                        size: 32.r,
+                      ),
+                      Text(
+                        '${medication.percentRemaining}%',
+                        style: TextStyle(
+                          fontSize: 12.sp,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
+
+            _buildInfoRow(Icons.access_time, 'Time', medication.time),
+            _buildInfoRow(Icons.repeat, 'Frequency', medication.frequencyDisplay),
+            _buildInfoRow(
+              Icons.medical_services,
+              'Dosage',
+              '${medication.pillsToDispense} ${medication.unit} per time',
+            ),
+
+            // Action Buttons
             HeightSpace(8),
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: medication.enabled
+                    onPressed: medication.enabled && !medication.isEmpty
                         ? () => _dispenseMedication(context)
                         : null,
                     icon: const Icon(Icons.medical_services, size: 18),
-                    label: const Text('Dispense Now'),
+                    label: const Text('Dispense'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primaryColor,
                       foregroundColor: Colors.white,
@@ -359,6 +519,25 @@ class MedicationListCard extends StatelessWidget {
                   ),
                 ),
                 WidthSpace(8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _refillSlot(context),
+                    icon: const Icon(Icons.add_circle, size: 18),
+                    label: const Text('Refill'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8.r),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
                 IconButton(
                   onPressed: () {
                     Navigator.push(
@@ -398,11 +577,13 @@ class MedicationListCard extends StatelessWidget {
             color: Colors.grey[600],
           ),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14.sp,
-            fontWeight: FontWeight.w500,
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: 14.sp,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],
