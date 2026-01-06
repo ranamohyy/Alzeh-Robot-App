@@ -1,10 +1,11 @@
-// lib/features/accessability/camera.dart - CONTINUOUS STREAMING VERSION
+// lib/features/accessability/camera.dart - FIXED MJPEG STREAMING
 
 import 'dart:io';
 import 'dart:async';
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/camera_service.dart';
 import 'package:flutter/material.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({super.key});
@@ -18,20 +19,40 @@ class _CameraScreenState extends State<CameraScreen> {
   bool isStreaming = false;
   List<CapturedPhoto> photos = [];
 
-  // For continuous streaming
-  String? streamUrl;
-  Timer? _refreshTimer;
-  int _frameCount = 0;
+  late WebViewController _webViewController;
+  bool _webViewLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    streamUrl = CameraService.getStreamUrl();
+    _initializeWebView();
+  }
+
+  void _initializeWebView() {
+    _webViewController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setBackgroundColor(Colors.black)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageStarted: (String url) {
+            setState(() {
+              _webViewLoaded = false;
+            });
+          },
+          onPageFinished: (String url) {
+            setState(() {
+              _webViewLoaded = true;
+            });
+          },
+          onWebResourceError: (WebResourceError error) {
+            print('WebView error: ${error.description}');
+          },
+        ),
+      );
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     super.dispose();
   }
 
@@ -61,9 +82,9 @@ class _CameraScreenState extends State<CameraScreen> {
                     WidthSpace(12),
                     Expanded(
                       child: Text(
-                        'Continuous live streaming from ESP32-CAM',
+                        'Live MJPEG stream from ESP32-CAM\nMake sure ESP32 IP: ${CameraService.esp32CameraIP}',
                         style: TextStyle(
-                          fontSize: 12.sp,
+                          fontSize: 11.sp,
                           color: Colors.blue.shade700,
                         ),
                       ),
@@ -72,14 +93,14 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
               ),
 
-              // Live Stream View (Always visible option)
+              // Start/Stop Stream Button
               if (!isStreaming)
                 ElevatedButton.icon(
                   onPressed: () {
                     setState(() {
                       isStreaming = true;
-                      _startFrameCounter();
                     });
+                    _loadStream();
                   },
                   icon: const Icon(Icons.play_arrow),
                   label: const Text('Start Live Stream'),
@@ -90,7 +111,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 ),
 
-              // Live Stream Container
+              // Live Stream Container with WebView
               if (isStreaming) ...[
                 Container(
                   decoration: BoxDecoration(
@@ -118,14 +139,14 @@ class _CameraScreenState extends State<CameraScreen> {
                                 Container(
                                   width: 10.w,
                                   height: 10.h,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
+                                  decoration: BoxDecoration(
+                                    color: _webViewLoaded ? Colors.red : Colors.grey,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
                                 WidthSpace(8),
                                 Text(
-                                  'LIVE',
+                                  _webViewLoaded ? 'LIVE' : 'CONNECTING...',
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -135,7 +156,7 @@ class _CameraScreenState extends State<CameraScreen> {
                               ],
                             ),
                             Text(
-                              'Frames: $_frameCount',
+                              'ESP32-CAM',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 12.sp,
@@ -145,7 +166,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         ),
                       ),
 
-                      // MJPEG Stream View
+                      // WebView for MJPEG Stream
                       ClipRRect(
                         borderRadius: BorderRadius.only(
                           bottomLeft: Radius.circular(10.r),
@@ -154,57 +175,36 @@ class _CameraScreenState extends State<CameraScreen> {
                         child: Container(
                           height: 300.h,
                           color: Colors.black,
-                          child: Image.network(
-                            '$streamUrl?timestamp=${DateTime.now().millisecondsSinceEpoch}',
-                            fit: BoxFit.contain,
-                            loadingBuilder: (context, child, loadingProgress) {
-                              if (loadingProgress == null) return child;
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    CircularProgressIndicator(
-                                      color: Colors.white,
-                                    ),
-                                    HeightSpace(16),
-                                    Text(
-                                      'Connecting to camera...',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                            errorBuilder: (context, error, stackTrace) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.error_outline,
-                                      color: Colors.red,
-                                      size: 48.r,
-                                    ),
-                                    HeightSpace(16),
-                                    Text(
-                                      'Stream Error',
-                                      style: TextStyle(
+                          child: Stack(
+                            children: [
+                              WebViewWidget(
+                                controller: _webViewController,
+                              ),
+                              if (!_webViewLoaded)
+                                Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
                                         color: Colors.white,
-                                        fontWeight: FontWeight.bold,
                                       ),
-                                    ),
-                                    HeightSpace(8),
-                                    Text(
-                                      'Check ESP32-CAM connection',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontSize: 12.sp,
+                                      HeightSpace(16),
+                                      Text(
+                                        'Connecting to ESP32-CAM...',
+                                        style: TextStyle(color: Colors.white),
                                       ),
-                                    ),
-                                  ],
+                                      HeightSpace(8),
+                                      Text(
+                                        CameraService.esp32CameraIP,
+                                        style: TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 10.sp,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              );
-                            },
+                            ],
                           ),
                         ),
                       ),
@@ -220,7 +220,6 @@ class _CameraScreenState extends State<CameraScreen> {
                         onPressed: () {
                           setState(() {
                             isStreaming = false;
-                            _stopFrameCounter();
                           });
                         },
                         icon: const Icon(Icons.stop, size: 18),
@@ -338,20 +337,42 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  void _startFrameCounter() {
-    _frameCount = 0;
-    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _frameCount++;
-        });
-      }
-    });
-  }
+  void _loadStream() {
+    final streamUrl = CameraService.getStreamUrl();
+    print('Loading stream: $streamUrl');
 
-  void _stopFrameCounter() {
-    _refreshTimer?.cancel();
-    _frameCount = 0;
+    // Load a simple HTML page that displays the MJPEG stream
+    final html = '''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+          }
+          img {
+            width: 100%;
+            height: auto;
+            max-width: 100%;
+            object-fit: contain;
+          }
+        </style>
+      </head>
+      <body>
+        <img src="$streamUrl" alt="ESP32-CAM Stream" />
+      </body>
+      </html>
+    ''';
+
+    _webViewController.loadHtmlString(html);
   }
 
   Future<void> _captureSnapshot() async {
@@ -370,7 +391,6 @@ class _CameraScreenState extends State<CameraScreen> {
       ),
     );
 
-    // Get single frame from ESP32
     final success = await CameraService.captureManualPhoto();
 
     if (mounted) {
@@ -382,7 +402,7 @@ class _CameraScreenState extends State<CameraScreen> {
           photos.insert(
             0,
             CapturedPhoto(
-              file: null, // We'll fetch from ESP32 if needed
+              file: null,
               time: TimeOfDay.now().format(context),
               date: '${now.day}/${now.month}/${now.year}',
               note: 'Snapshot from live stream',
@@ -433,7 +453,7 @@ class _CameraScreenState extends State<CameraScreen> {
           isMonitoring = true;
           if (!isStreaming) {
             isStreaming = true;
-            _startFrameCounter();
+            _loadStream();
           }
         });
 
