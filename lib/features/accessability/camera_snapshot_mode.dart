@@ -1,41 +1,47 @@
-// lib/features/accessability/camera.dart - FIXED FOR MJPEG STREAMING
+// lib/features/accessability/camera_snapshot_mode.dart
+// SNAPSHOT-BASED PSEUDO-STREAM (More reliable for mobile)
 
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:io';
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/camera_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-class CameraScreen extends StatefulWidget {
-  const CameraScreen({super.key});
+class CameraScreenSnapshotMode extends StatefulWidget {
+  const CameraScreenSnapshotMode({super.key});
 
   @override
-  State<CameraScreen> createState() => _CameraScreenState();
+  State<CameraScreenSnapshotMode> createState() => _CameraScreenSnapshotModeState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenSnapshotModeState extends State<CameraScreenSnapshotMode> {
   bool isMonitoring = false;
   bool isStreaming = false;
   List<CapturedPhoto> photos = [];
 
-  // MJPEG streaming state
-  StreamSubscription? _streamSubscription;
+  // Snapshot mode state
+  Timer? _snapshotTimer;
   Uint8List? _currentFrame;
   bool _isConnected = false;
   String _status = 'Not connected';
+  int _frameCount = 0;
+  int _failCount = 0;
 
   @override
   void dispose() {
-    _stopStreamingInternal();
+    _stopSnapshotMode();
     super.dispose();
   }
 
-  void _stopStreamingInternal() {
-    _streamSubscription?.cancel();
-    _streamSubscription = null;
+  void _stopSnapshotMode() {
+    _snapshotTimer?.cancel();
+    _snapshotTimer = null;
     _currentFrame = null;
     _isConnected = false;
+    _frameCount = 0;
+    _failCount = 0;
   }
 
   @override
@@ -54,20 +60,20 @@ class _CameraScreenState extends State<CameraScreen> {
               Container(
                 padding: EdgeInsets.all(12.r),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(12.r),
-                  border: Border.all(color: Colors.blue.shade200),
+                  border: Border.all(color: Colors.green.shade200),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade700),
+                    Icon(Icons.info_outline, color: Colors.green.shade700),
                     WidthSpace(12),
                     Expanded(
                       child: Text(
-                        'Live MJPEG stream from ESP32-CAM\nMake sure ESP32 IP: ${CameraService.esp32CameraIP}',
+                        'Snapshot mode: More stable for mobile\nESP32 IP: ${CameraService.esp32CameraIP}',
                         style: TextStyle(
                           fontSize: 11.sp,
-                          color: Colors.blue.shade700,
+                          color: Colors.green.shade700,
                         ),
                       ),
                     ),
@@ -75,12 +81,12 @@ class _CameraScreenState extends State<CameraScreen> {
                 ),
               ),
 
-              // Start/Stop Stream Button
+              // Start/Stop Button
               if (!isStreaming)
                 ElevatedButton.icon(
-                  onPressed: _startStreaming,
+                  onPressed: _startSnapshotMode,
                   icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start Live Stream'),
+                  label: const Text('Start Live View (Snapshots)'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
                     foregroundColor: Colors.white,
@@ -88,7 +94,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 ),
 
-              // Live Stream Container
+              // Live View Container
               if (isStreaming) ...[
                 Container(
                   decoration: BoxDecoration(
@@ -98,7 +104,7 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Stream Header
+                      // Header
                       Container(
                         padding: EdgeInsets.all(8.r),
                         decoration: BoxDecoration(
@@ -133,7 +139,7 @@ class _CameraScreenState extends State<CameraScreen> {
                               ],
                             ),
                             Text(
-                              'ESP32-CAM',
+                              '$_frameCount frames',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 12.sp,
@@ -143,7 +149,7 @@ class _CameraScreenState extends State<CameraScreen> {
                         ),
                       ),
 
-                      // Stream Display
+                      // Image Display
                       ClipRRect(
                         borderRadius: BorderRadius.only(
                           bottomLeft: Radius.circular(10.r),
@@ -170,14 +176,14 @@ class _CameraScreenState extends State<CameraScreen> {
                                   _status,
                                   style: TextStyle(color: Colors.white),
                                 ),
-                                HeightSpace(8),
-                                Text(
-                                  CameraService.esp32CameraIP,
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 10.sp,
+                                if (_failCount > 0)
+                                  Text(
+                                    'Fails: $_failCount',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 10.sp,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
@@ -187,20 +193,20 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 ),
 
-                // Stream Controls
+                // Controls
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          _stopStreamingInternal();
+                          _stopSnapshotMode();
                           setState(() {
                             isStreaming = false;
                             _status = 'Stopped';
                           });
                         },
                         icon: const Icon(Icons.stop, size: 18),
-                        label: const Text('Stop Stream'),
+                        label: const Text('Stop'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
                           foregroundColor: Colors.white,
@@ -212,7 +218,7 @@ class _CameraScreenState extends State<CameraScreen> {
                       child: ElevatedButton.icon(
                         onPressed: _captureSnapshot,
                         icon: const Icon(Icons.camera_alt, size: 18),
-                        label: const Text('Snapshot'),
+                        label: const Text('Save'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryColor,
                           foregroundColor: Colors.white,
@@ -274,9 +280,9 @@ class _CameraScreenState extends State<CameraScreen> {
                 photo.time,
                 photo.date,
                 imageFile: photo.file,
+                frameData: photo.frameData,
               )),
 
-              // Placeholder if no photos
               if (photos.isEmpty)
                 Container(
                   padding: EdgeInsets.all(32.r),
@@ -296,14 +302,6 @@ class _CameraScreenState extends State<CameraScreen> {
                         'No photos yet',
                         style: AppStyles.kTextStyle16Grey,
                       ),
-                      HeightSpace(8),
-                      Text(
-                        'Tap Snapshot while streaming',
-                        style: TextStyle(
-                          fontSize: 12.sp,
-                          color: Colors.grey,
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -314,177 +312,79 @@ class _CameraScreenState extends State<CameraScreen> {
     );
   }
 
-  Future<void> _startStreaming() async {
+  // SNAPSHOT MODE: Fetch images repeatedly
+  Future<void> _startSnapshotMode() async {
     setState(() {
       isStreaming = true;
       _status = 'Connecting...';
+      _frameCount = 0;
+      _failCount = 0;
     });
 
-    try {
-      final streamUrl = CameraService.getStreamUrl();
-      print('🎥 Connecting to MJPEG stream: $streamUrl');
+    print('📸 Starting snapshot mode');
+    print('   URL: ${CameraService.getStreamUrl().replaceAll('/stream', '/snapshot')}');
 
-      final request = http.Request('GET', Uri.parse(streamUrl));
-      request.headers['Connection'] = 'keep-alive';
-
-      final response = await request.send().timeout(
-        const Duration(seconds: 10),
-        onTimeout: () {
-          throw Exception('Connection timeout');
-        },
-      );
-
-      print('📡 Response status: ${response.statusCode}');
-      print('📡 Headers: ${response.headers}');
-
-      if (response.statusCode == 200) {
-        setState(() {
-          _status = 'Parsing stream...';
-          _isConnected = true;
-        });
-
-        // ENHANCED MJPEG PARSER with detailed logging
-        List<int> buffer = [];
-        int frameCount = 0;
-        int totalBytes = 0;
-
-        _streamSubscription = response.stream.listen(
-              (chunk) {
-            totalBytes += chunk.length;
-            buffer.addAll(chunk);
-
-            // Log first chunk
-            if (frameCount == 0 && buffer.length > 100) {
-              print('📦 First chunk received: ${chunk.length} bytes');
-              print('📦 Buffer preview (first 100 bytes): ${buffer.take(100).toList()}');
-            }
-
-            // Parse frames from buffer
-            while (true) {
-              // Find JPEG start marker (FF D8)
-              int startIndex = -1;
-              for (int i = 0; i < buffer.length - 1; i++) {
-                if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8) {
-                  startIndex = i;
-                  break;
-                }
-              }
-
-              if (startIndex == -1) {
-                // No JPEG start found, keep last 2 bytes and discard rest
-                if (buffer.length > 2) {
-                  buffer = buffer.sublist(buffer.length - 2);
-                }
-                break;
-              }
-
-              // Find JPEG end marker (FF D9) after start
-              int endIndex = -1;
-              for (int i = startIndex + 2; i < buffer.length - 1; i++) {
-                if (buffer[i] == 0xFF && buffer[i + 1] == 0xD9) {
-                  endIndex = i + 1; // Include FF D9
-                  break;
-                }
-              }
-
-              if (endIndex == -1) {
-                // No end marker yet, keep from start and wait for more data
-                if (startIndex > 0) {
-                  buffer = buffer.sublist(startIndex);
-                }
-                break;
-              }
-
-              // Complete JPEG frame found!
-              try {
-                final frameData = Uint8List.fromList(
-                    buffer.sublist(startIndex, endIndex + 1)
-                );
-
-                frameCount++;
-
-                if (frameCount == 1) {
-                  print('✅ First frame decoded! Size: ${frameData.length} bytes');
-                }
-
-                if (frameCount % 30 == 0) {
-                  print('📊 Stats: $frameCount frames, ${(totalBytes / 1024).toStringAsFixed(1)} KB total');
-                }
-
-                if (mounted) {
-                  setState(() {
-                    _currentFrame = frameData;
-                    _status = 'Streaming ($frameCount frames)';
-                  });
-                }
-
-                // Remove processed frame from buffer
-                buffer = buffer.sublist(endIndex + 1);
-
-              } catch (e) {
-                print('❌ Frame decode error: $e');
-                buffer = buffer.sublist(endIndex + 1);
-              }
-            }
-
-            // Prevent buffer overflow
-            if (buffer.length > 100000) {
-              print('⚠️  Buffer overflow! Resetting...');
-              buffer.clear();
-            }
-          },
-          onError: (error) {
-            print('❌ Stream error: $error');
-            print('📊 Total frames received: $frameCount');
-            if (mounted) {
-              setState(() {
-                _status = 'Error: $error';
-                _isConnected = false;
-              });
-            }
-            _reconnect();
-          },
-          onDone: () {
-            print('🔌 Stream closed normally');
-            print('📊 Total frames received: $frameCount');
-            if (mounted) {
-              setState(() {
-                _status = 'Disconnected';
-                _isConnected = false;
-              });
-            }
-          },
-          cancelOnError: false,
-        );
-      } else {
-        throw Exception('HTTP ${response.statusCode}');
-      }
-    } catch (e) {
-      print('❌ Failed to start stream: $e');
-      if (mounted) {
-        setState(() {
-          _status = 'Failed: $e';
-          _isConnected = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Connection failed: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    }
+    // Start periodic snapshot fetching
+    _snapshotTimer = Timer.periodic(
+      const Duration(milliseconds: 200), // 5 FPS
+          (timer) async {
+        await _fetchSnapshot();
+      },
+    );
   }
 
-  void _reconnect() {
-    Future.delayed(const Duration(seconds: 2), () {
-      if (isStreaming && mounted) {
-        print('Attempting to reconnect...');
-        _stopStreamingInternal();
-        _startStreaming();
+  Future<void> _fetchSnapshot() async {
+    try {
+      final snapshotUrl = '${CameraService.getStreamUrl().replaceAll('/stream', '/snapshot')}';
+
+      final response = await http.get(Uri.parse(snapshotUrl)).timeout(
+        const Duration(seconds: 2),
+      );
+
+      if (response.statusCode == 200) {
+        _frameCount++;
+        _failCount = 0;
+
+        if (_frameCount == 1) {
+          print('✅ First snapshot received! Size: ${response.bodyBytes.length} bytes');
+        }
+
+        if (!_isConnected) {
+          print('✅ Snapshot mode connected successfully');
+        }
+
+        if (mounted) {
+          setState(() {
+            _currentFrame = response.bodyBytes;
+            _isConnected = true;
+            _status = 'Live ($_frameCount frames)';
+          });
+        }
+      } else {
+        _failCount++;
+        print('⚠️  Snapshot failed: HTTP ${response.statusCode}');
+
+        if (_failCount > 5 && mounted) {
+          setState(() {
+            _isConnected = false;
+            _status = 'Connection issues';
+          });
+        }
       }
-    });
+    } catch (e) {
+      _failCount++;
+
+      if (_failCount == 1) {
+        print('❌ Snapshot error: $e');
+      }
+
+      if (_failCount > 10 && mounted) {
+        setState(() {
+          _isConnected = false;
+          _status = 'Failed: $e';
+        });
+      }
+    }
   }
 
   Future<void> _captureSnapshot() async {
@@ -506,7 +406,7 @@ class _CameraScreenState extends State<CameraScreen> {
           file: null,
           time: TimeOfDay.now().format(context),
           date: '${now.day}/${now.month}/${now.year}',
-          note: 'Snapshot from live stream',
+          note: 'Saved snapshot',
           frameData: _currentFrame,
         ),
       );
@@ -514,7 +414,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('✓ Snapshot saved!'),
+        content: Text('✓ Photo saved!'),
         backgroundColor: Colors.green,
       ),
     );
@@ -545,7 +445,7 @@ class _CameraScreenState extends State<CameraScreen> {
         setState(() {
           isMonitoring = true;
           if (!isStreaming) {
-            _startStreaming();
+            _startSnapshotMode();
           }
         });
 
@@ -584,7 +484,7 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 }
 
-// Photo data class - UPDATED
+// Photo data classes (same as MJPEG version)
 class CapturedPhoto {
   final File? file;
   final String time;
@@ -601,7 +501,6 @@ class CapturedPhoto {
   });
 }
 
-// Photo card widget - UPDATED
 class CameraPhotoCard extends StatelessWidget {
   const CameraPhotoCard(this.time, this.date, {super.key, this.imageFile, this.frameData});
 

@@ -1,4 +1,5 @@
 import 'package:alzeh/core/resources/barallel.dart';
+import 'package:alzeh/features/accessability/camera_snapshot_mode.dart'; // ADD THIS
 
 class QuickAccessSection extends StatelessWidget {
   const QuickAccessSection({super.key});
@@ -17,7 +18,7 @@ class QuickAccessSection extends StatelessWidget {
               Icons.camera_alt,
               'Camera',
               context,
-              CameraScreen(),
+              CameraScreenSnapshotMode(), // CHANGED THIS
             ),
             _quickAccessButton(Icons.mic, 'Voice', context, MicrophoneScreen()),
             _quickAccessButton(Icons.edit, 'Manual', context, ManualChange()),
