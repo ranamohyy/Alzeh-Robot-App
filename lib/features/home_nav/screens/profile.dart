@@ -1,10 +1,7 @@
-// lib/features/home_nav/screens/profile.dart - WITH DEBUG
-
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/auth_service.dart';
 import 'package:alzeh/features/auth/login.dart';
 import 'package:alzeh/features/edit_profile/edit_profile.dart';
-import 'package:alzeh/features/debug/debug_screen.dart';
 import 'package:alzeh/features/widgets/menu_items.dart';
 import 'package:alzeh/features/widgets/person_data.dart';
 import 'package:alzeh/features/widgets/profile_image.dart';
@@ -83,22 +80,7 @@ class ProfileScreen extends StatelessWidget {
               ],
             ),
 
-            // DEBUG MENU ITEM - ADD THIS
-            MenuItems(
-              title: 'Debug Tools',
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const DebugScreen(),
-                  ),
-                );
-              },
-              iconWidget: Icon(
-                Icons.bug_report,
-                color: Colors.orange,
-              ),
-            ),
+            // Debug menu item removed
 
             MenuItems(
               icon: AppStrings.settings,
@@ -140,7 +122,7 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-// Update MenuItems to support Icon widget
+// MenuItems widget definition...
 class MenuItems extends StatelessWidget {
   const MenuItems({
     super.key,

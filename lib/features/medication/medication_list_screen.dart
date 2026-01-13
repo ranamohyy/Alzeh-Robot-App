@@ -1,13 +1,37 @@
-// lib/features/medication/medication_list_screen.dart - UPDATED WITH REFILL
+// lib/features/medication/medication_list_screen.dart - UPDATED
+// NOW LISTENS FOR AUTO-DISPENSE + KEEPS MANUAL BUTTON
 
 import 'package:alzeh/core/resources/barallel.dart';
 import 'package:alzeh/core/services/firebase_service.dart';
+import 'package:alzeh/core/services/dispense_listener_service.dart'; // NEW
 import 'package:alzeh/features/model/medication_model.dart';
 import 'package:alzeh/features/medication/add_edit_medication_screen.dart';
+import 'package:alzeh/features/medication/post_dispense_screen.dart';
 import 'package:flutter/material.dart';
 
-class MedicationListScreen extends StatelessWidget {
+class MedicationListScreen extends StatefulWidget {
   const MedicationListScreen({super.key});
+
+  @override
+  State<MedicationListScreen> createState() => _MedicationListScreenState();
+}
+
+class _MedicationListScreenState extends State<MedicationListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // ✅ START BACKGROUND LISTENER FOR AUTO-DISPENSE
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      DispenseListenerService.initialize(context);
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Update context in case of navigation changes
+    DispenseListenerService.updateContext(context);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -90,20 +114,21 @@ class MedicationListScreen extends StatelessWidget {
                 margin: EdgeInsets.all(16.r),
                 padding: EdgeInsets.all(12.r),
                 decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
+                  color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(12.r),
-                  border: Border.all(color: Colors.blue.shade200),
+                  border: Border.all(color: Colors.green.shade200),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue.shade700),
+                    Icon(Icons.check_circle, color: Colors.green.shade700),
                     WidthSpace(12),
                     Expanded(
                       child: Text(
-                        'ESP32 tracks pill counts automatically',
+                        '✓ Auto-capture enabled\nCamera opens when ESP32 dispenses',
                         style: TextStyle(
                           fontSize: 12.sp,
-                          color: Colors.blue.shade700,
+                          color: Colors.green.shade700,
+                          height: 1.4,
                         ),
                       ),
                     ),
@@ -133,6 +158,7 @@ class MedicationListCard extends StatelessWidget {
   const MedicationListCard({super.key, required this.medication});
   final MedicationModel medication;
 
+  // MANUAL DISPENSE (keeps existing functionality)
   Future<void> _dispenseMedication(BuildContext context) async {
     // Check if enough pills
     if (medication.remainingPills < medication.pillsToDispense) {
@@ -161,9 +187,27 @@ class MedicationListCard extends StatelessWidget {
             HeightSpace(8),
             Text('Remaining after: ${medication.remainingPills - medication.pillsToDispense}'),
             HeightSpace(16),
-            Text(
-              'Send command to ESP32?',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Container(
+              padding: EdgeInsets.all(12.r),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8.r),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.camera_alt, color: Colors.blue.shade700, size: 20.r),
+                  WidthSpace(8),
+                  Expanded(
+                    child: Text(
+                      'Camera & voice recording will open automatically',
+                      style: TextStyle(
+                        fontSize: 11.sp,
+                        color: Colors.blue.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -185,6 +229,7 @@ class MedicationListCard extends StatelessWidget {
 
     if (confirm != true) return;
 
+    // Show dispensing dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -195,11 +240,17 @@ class MedicationListCard extends StatelessWidget {
             const CircularProgressIndicator(),
             HeightSpace(16),
             const Text('Sending command to ESP32...'),
+            HeightSpace(8),
+            Text(
+              'Dispensing ${medication.pillsToDispense} pills...',
+              style: TextStyle(fontSize: 12.sp, color: Colors.grey),
+            ),
           ],
         ),
       ),
     );
 
+    // Send command to ESP32
     final success = await FirebaseService.sendDispenseCommand(
       medication.id!,
       medication.name,
@@ -209,16 +260,24 @@ class MedicationListCard extends StatelessWidget {
     if (context.mounted) Navigator.pop(context);
 
     if (success && context.mounted) {
+      // Log medication taken
       await FirebaseService.logMedicationTaken(
         medication.id!,
         medication.name,
         'taken',
       );
 
-      await showSuccessDialog(
-        context,
-        '✓ Command Sent!\n\nESP32 dispensing ${medication.pillsToDispense} ${medication.unit}',
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ Dispensing ${medication.name}...'),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
       );
+
+      // Background listener will automatically open PostDispenseScreen
+      // when ESP32 completes and sends completion signal
     } else if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -425,7 +484,7 @@ class MedicationListCard extends StatelessWidget {
               ],
             ),
 
-            // Pill Inventory (NEW)
+            // Pill Inventory
             Container(
               padding: EdgeInsets.all(12.r),
               decoration: BoxDecoration(
