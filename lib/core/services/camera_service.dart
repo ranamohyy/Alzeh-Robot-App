@@ -8,7 +8,7 @@ class CameraService {
   static final ImagePicker _picker = ImagePicker();
 
   // ESP32 Camera IP (UPDATE THIS!)
-  static String esp32CameraIP = "192.168.1.3"; // ⚠️ CHANGE TO YOUR ESP32-3 IP
+  static String esp32CameraIP = "192.168.8.107"; // ⚠️ CHANGE TO YOUR ESP32-3 IP
 
   // ==================== TAKE PHOTO ====================
 

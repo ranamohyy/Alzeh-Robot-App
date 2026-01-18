@@ -9,7 +9,7 @@ class AudioRecordingService {
   static bool _isInitialized = false;
 
   // ESP32 Configuration - CHANGE THIS TO YOUR ESP32 IP
-  static const String ESP32_IP = '192.168.1.70';
+  static const String ESP32_IP = '192.168.8.113';
   static const int ESP32_PORT = 80;
 
   static Future<bool> initialize() async {
