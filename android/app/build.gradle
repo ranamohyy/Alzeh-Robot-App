@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.alzeh"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35  // Updated to 35 for latest plugins
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -16,24 +16,20 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = '1.8'
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.alzeh"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24  // Changed from flutter.minSdkVersion - Required for Firebase
+        targetSdk = 35  // Updated to 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true  // Added for Firebase
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.debug
         }
     }
@@ -42,3 +38,17 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // Firebase dependencies
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-database'
+    implementation 'com.google.firebase:firebase-auth'
+
+    // MultiDex support for Firebase
+    implementation 'androidx.multidex:multidex:2.0.1'
+}
+
+// IMPORTANT: This must be at the very bottom of the file
+apply plugin: 'com.google.gms.google-services'

@@ -1,3 +1,5 @@
+// lib/features/widgets/photo_card.dart - FIXED
+
 import 'dart:developer';
 import 'package:alzeh/core/resources/barallel.dart';
 
@@ -12,6 +14,7 @@ class PhotoCard extends StatefulWidget {
 
 class _PhotoCardState extends State<PhotoCard> {
   File? image;
+
   Future<void> takeImage() async {
     final pickedImage = await ImagePickerService().pickImageFromGallery();
     if (pickedImage == null) {
@@ -39,7 +42,10 @@ class _PhotoCardState extends State<PhotoCard> {
             fit: BoxFit.cover,
           ),
         ),
-        child: MedicineWithDate(title: widget),
+        child: MedicineWithDate(
+          time: widget.time,
+          date: widget.date,
+        ),
       ),
     );
   }

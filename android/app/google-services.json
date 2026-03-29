@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "495317171778",
+    "firebase_url": "https://medication-cc318-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "medication-cc318",
+    "storage_bucket": "medication-cc318.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:495317171778:android:ad3d4e685b27d1507af7db",
+        "android_client_info": {
+          "package_name": "com.example.alzeh"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "495317171778-6gp7tf0u01pmbo7ajble6ro5vt4vh48o.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.alzeh",
+            "certificate_hash": "138a5d02fb08e51b44a1256c3533d74678e7b8b9"
+          }
+        },
+        {
+          "client_id": "495317171778-ls7bm2m21t7jbjdul2a4jphh5m37jmbn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUurPYe_p_VpM1zPje0c9U9tsYgmRV5bA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "495317171778-ls7bm2m21t7jbjdul2a4jphh5m37jmbn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "495317171778-5uh91n31rrfbetd8c9btdegrg9phq79u.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.alzeh"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
